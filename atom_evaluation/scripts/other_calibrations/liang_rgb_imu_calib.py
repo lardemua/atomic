@@ -18,7 +18,7 @@ from atom_core.atom import getTransform, getChain
 from atom_core.geometry import traslationRodriguesToTransform
 from atom_core.naming import generateKey
 from atom_core.transformations import compareTransforms
-from atom_core.utilities import compareAtomTransforms
+from atom_core.utilities import atomError, compareAtomTransforms
 
 def main():
 
@@ -63,6 +63,16 @@ def main():
     # We only need to get one collection because optimized transformations are static, which means they are the same for all collections. Let's select the first key in the dictionary and always get that transformation.
     selected_collection_key = list(dataset["collections"].keys())[0]
     print("Selected collection key is " + str(selected_collection_key))
+
+    # ---------------------------------------
+    # Verifications
+    # ---------------------------------------
+
+    # Check that the camera has rgb modality
+    if not dataset['sensors'][args['camera']]['modality'] == 'rgb':
+        atomError('Sensor ' + args['camera'] + ' is not of rgb modality.')
+
+
 
 if __name__ == "__main__":
     main()
