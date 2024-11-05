@@ -20,6 +20,34 @@ from atom_core.naming import generateKey
 from atom_core.transformations import compareTransforms
 from atom_core.utilities import atomError, compareAtomTransforms
 
+
+def getCameraIntrinsicsFromDataset(dataset, camera):
+    # Camera intrinsics (from the dataset) needed to calculate B
+    K = np.zeros((3, 3), np.float32)
+    D = np.zeros((5, 1), np.float32)
+    K[0, :] = dataset['sensors'][camera]['camera_info']['K'][0:3]
+    K[1, :] = dataset['sensors'][camera]['camera_info']['K'][3:6]
+    K[2, :] = dataset['sensors'][camera]['camera_info']['K'][6:9]
+    D[:, 0] = dataset['sensors'][camera]['camera_info']['D'][0:5]
+
+    height = dataset['sensors'][camera]['camera_info']['height']
+    width = dataset['sensors'][camera]['camera_info']['width']
+    image_size = (height, width)
+
+    return K, D, image_size
+
+def getPatternConfig(dataset, pattern):
+    # Pattern configs
+    nx = dataset['calibration_config']['calibration_patterns'][pattern]['dimension']['x']
+    ny = dataset['calibration_config']['calibration_patterns'][pattern]['dimension']['y']
+    square = dataset['calibration_config']['calibration_patterns'][pattern]['size']
+    inner_square = dataset['calibration_config']['calibration_patterns'][pattern]['inner_size']
+    objp = np.zeros((nx * ny, 3), np.float32)
+    # set of coordinates (w.r.t. the pattern frame) of the corners
+    objp[:, :2] = square * np.mgrid[0:nx, 0:ny].T.reshape(-1, 2)
+
+    return nx, ny, square, inner_square, objp
+
 def main():
 
     ########################################
@@ -71,6 +99,25 @@ def main():
     # Check that the camera has rgb modality
     if not dataset['sensors'][args['camera']]['modality'] == 'rgb':
         atomError('Sensor ' + args['camera'] + ' is not of rgb modality.')
+
+    ########################################
+    # DATASET PREPROCESSING #
+    ########################################
+
+    # Get camera intrinsics from the dataset, needed to calculate B
+    K, D, image_size = getCameraIntrinsicsFromDataset(
+        dataset=dataset,
+        camera=camera
+        )
+
+    # Get pattern configuration from the dataset, also needed to calulate B
+    
+    nx, ny, square, inner_square, objp = getPatternConfig(dataset=dataset, pattern=pattern)
+    number_of_corners = int(nx) * int(ny)
+
+
+
+
 
 
 
