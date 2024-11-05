@@ -10,6 +10,7 @@ from colorama import Fore
 import numpy as np
 import cv2
 from prettytable import PrettyTable
+from atom_calibration.collect import patterns
 import tf
 import math
 
@@ -100,25 +101,74 @@ def main():
     if not dataset['sensors'][args['camera']]['modality'] == 'rgb':
         atomError('Sensor ' + args['camera'] + ' is not of rgb modality.')
 
-    ########################################
-    # DATASET PREPROCESSING #
-    ########################################
-
-    # Get camera intrinsics from the dataset, needed to calculate B
-    K, D, image_size = getCameraIntrinsicsFromDataset(
-        dataset=dataset,
-        camera=camera
-        )
-
-    # Get pattern configuration from the dataset, also needed to calulate B
-    
-    nx, ny, square, inner_square, objp = getPatternConfig(dataset=dataset, pattern=pattern)
+    # ---------------------------------------
+    # Pattern configuration
+    # ---------------------------------------
+    nx = dataset['calibration_config']['calibration_patterns'][args['pattern']
+                                                               ]['dimension']['x']
+    ny = dataset['calibration_config']['calibration_patterns'][args['pattern']
+                                                               ]['dimension']['y']
+    square = dataset['calibration_config']['calibration_patterns'][args['pattern']]['size']
+    pts_3d = np.zeros((nx * ny, 3), np.float32)
+    # set of coordinates (w.r.t. the pattern frame) of the corners
+    pts_3d[:, :2] = square * np.mgrid[0:nx, 0:ny].T.reshape(-1, 2)
+    # print(pts_3d)
     number_of_corners = int(nx) * int(ny)
 
+    # ---------------------------------------
+    # --- Get intrinsic data for the camera
+    # ---------------------------------------
+    # Source sensor
+    K = np.zeros((3, 3), np.float32)
+    D = np.zeros((5, 1), np.float32)
+    K[0, :] = dataset['sensors'][args['camera']]['camera_info']['K'][0:3]
+    K[1, :] = dataset['sensors'][args['camera']]['camera_info']['K'][3:6]
+    K[2, :] = dataset['sensors'][args['camera']]['camera_info']['K'][6:9]
+    D[:, 0] = dataset['sensors'][args['camera']]['camera_info']['D'][0:5]
 
 
+    # ---------------------------------------
+    # --- Implementation
+    # ---------------------------------------
 
+    # Calculate camera-to-pattern tf (c_T_p/H_cw in the paper) for each collection
+    c_T_p_lst = [] # list of camera to pattern 4x4 transforms
 
+    for collection_key, collection in dataset['collections'].items():
+
+        # Pattern not detected by sensor in collection
+        if not collection['labels'][args['pattern']][args['camera']]['detected']:
+            continue        
+        
+        # First, I need to initialize a board object
+        board_size = {'x': nx, 'y': ny}
+        inner_length = dataset['calibration_config']['calibration_patterns'][
+            args['pattern']]['inner_size']
+        dictionary = dataset['calibration_config']['calibration_patterns'][
+            args['pattern']]['dictionary']
+        pattern = patterns.CharucoPattern(board_size, square, inner_length, dictionary)
+
+        # Build a numpy array with the charuco corners
+        corners = np.zeros(
+            (len(collection['labels'][args['pattern']][args['camera']]['idxs']), 1, 2), dtype=float)
+        ids = list(range(0, len(collection['labels'][args['pattern']][args['camera']]['idxs'])))
+        for idx, point in enumerate(collection['labels'][args['pattern']][args['camera']]['idxs']):
+            corners[idx, 0, 0] = point['x']
+            corners[idx, 0, 1] = point['y']
+            ids[idx] = point['id']
+
+        # Find pose of the camera w.r.t the chessboard
+        np_ids = np.array(ids, dtype=int)
+        rvec, tvec = None, None
+        _, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(np.array(corners, dtype=np.float32),
+                                                             np_ids, pattern.board,
+                                                             K, D, rvec, tvec)
+        
+        # Convert to 4x4 transform and add to list
+        c_T_p = traslationRodriguesToTransform(tvec, rvec)
+        c_T_p_lst.append(c_T_p)
+
+        print(c_T_p)
 
 
 if __name__ == "__main__":
