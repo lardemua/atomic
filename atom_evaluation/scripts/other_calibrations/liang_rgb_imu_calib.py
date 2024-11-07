@@ -64,11 +64,12 @@ def main():
                     "optimization). The Syntax is lambda name: f(x), where f(x) is the function in python "
                     "language. Example: lambda name: int(name) > 5 , to load only collections 6, 7, and onward.")
     ap.add_argument("-c", "--camera", help="Camera sensor name.", type=str, required=True)
-    ap.add_argument("-iln", "--imu_link_name", help="The name of the IMU link.", type=str, required=True)    
+    ap.add_argument("-iln", "--imu_link_name", help="The name of the IMU link.", type=str, required=True)
+    ap.add_argument("-wln", "--world_link_name", help="Name of the world coordinate frame.", type=str, required=False, default='world')
     ap.add_argument("-p", "--pattern", help="Pattern to be used for calibration.", type=str, required=True)
     ap.add_argument("-uic", "--use_incomplete_collections", action="store_true", default=False, help="Remove any collection which does not have a detection for all sensors.", )
     ap.add_argument("-ctgt", "--compare_to_ground_truth", action="store_true", help="If the system being calibrated is simulated, directly compare the TFs to the ground truth.")
-    
+ 
     args = vars(ap.parse_args())
 
     json_file = args['json_file']
@@ -76,6 +77,7 @@ def main():
     imu_link_name = args["imu_link_name"]
     camera = args['camera']
     pattern = args['pattern']
+    world_link_name = args['world_link_name']
 
     # Read dataset file
     dataset, json_file = loadResultsJSON(json_file, collection_selection_function)
@@ -114,6 +116,15 @@ def main():
     # print(pts_3d)
     number_of_corners = int(nx) * int(ny)
 
+    # Initialization of a board object for pose estimation
+    board_size = {'x': nx, 'y': ny}
+    inner_length = dataset['calibration_config']['calibration_patterns'][
+        args['pattern']]['inner_size']
+    dictionary = dataset['calibration_config']['calibration_patterns'][
+        args['pattern']]['dictionary']
+    pattern = patterns.CharucoPattern(board_size, square, inner_length, dictionary)
+    
+    
     # ---------------------------------------
     # --- Get intrinsic data for the camera
     # ---------------------------------------
@@ -130,8 +141,9 @@ def main():
     # --- Implementation
     # ---------------------------------------
 
-    # Calculate camera-to-pattern tf (c_T_p/H_cw in the paper) for each collection
+    # Calculate camera-to-pattern tf (c_T_p/H_cw in the paper) and imu_T_w for each collection
     c_T_p_lst = [] # list of tuples (collection, camera to pattern 4x4 transforms)
+    imu_T_w_lst = []
 
     for collection_key, collection in dataset['collections'].items():
 
@@ -139,13 +151,6 @@ def main():
         if not collection['labels'][args['pattern']][args['camera']]['detected']:
             continue        
         
-        # First, I need to initialize a board object
-        board_size = {'x': nx, 'y': ny}
-        inner_length = dataset['calibration_config']['calibration_patterns'][
-            args['pattern']]['inner_size']
-        dictionary = dataset['calibration_config']['calibration_patterns'][
-            args['pattern']]['dictionary']
-        pattern = patterns.CharucoPattern(board_size, square, inner_length, dictionary)
 
         # Build a numpy array with the charuco corners
         corners = np.zeros(
@@ -167,23 +172,40 @@ def main():
         c_T_p = traslationRodriguesToTransform(tvec, rvec)
         c_T_p_lst.append((collection_key, c_T_p))
         
-    
+        
+        # Get tf through FK. We can do this because the tfs in the dataset (in simulation) are GT.
+        # TODO: Ultimately, this is not what we want to do. We are supposed to integrate IMU data to get the necessary TFs. This FK method is an intermediate step. Create an option for this to be enable for when IMU data integration is implemented.
+        imu_T_w = getTransform(
+            from_frame = imu_link_name,
+            to_frame = world_link_name,
+            transforms = collection['transforms']
+        )
+
+        imu_T_w_lst.append((collection_key, imu_T_w))
+
     # Get the interframe c_T_p (H_cij in the paper)
     # These will be stored in a dictionary where the key is name of the collections (i-j)
-    interframe_c_T_p_dict = {}
+    interframe_tfs_dict = {}
 
     for i in range(len(c_T_p_lst) - 1):
-        j = i+1        
+        j = i+1
         key_name = str(c_T_p_lst[i][0]) + '-' + str(c_T_p_lst[j][0]) # Get the name of the key for the dict
+        # Create an empty dict for each adjacent collection combination so it can hold both c_T and imu_T
+        interframe_tfs_dict[key_name] = {}
+
+        # Equation 17 from the original paper states that the tranformation matrix of the camera from collection i to collection j (c_T_ij) is equal to the c_T_p in collection i multiplied by its inverse in collection j
         c_T_p_i = c_T_p_lst[i][1]
         c_T_p_j_inv = np.linalg.inv(c_T_p_lst[j][1])
+        interframe_c_T = np.dot(c_T_p_i, c_T_p_j_inv)
         
-        # Equation 17 from the original paper states that the tranformation matrix of the camera from collection i to collection j is equal to the c_T_p in collection i multiplied by its inverse in collection j
-        interframe_c_T_p = np.dot(c_T_p_i, c_T_p_j_inv) 
+        # For now, we can determine the interframe imu transforms with a similar logic. imu_T_w_i * imu_T_w_j_inv == imu_T_ij
+        imu_T_w_i = imu_T_w_lst[i][1]
+        imu_T_w_j_inv = np.linalg.inv(imu_T_w_lst[j][1])
+        interframe_imu_T = np.dot(imu_T_w_i, imu_T_w_j_inv)
         
-        interframe_c_T_p_dict[key_name] = interframe_c_T_p # Save to the dict
-
-    
+        # Save to the dict
+        interframe_tfs_dict[key_name]["c_T"] = interframe_c_T
+        interframe_tfs_dict[key_name]["imu_T"] = interframe_imu_T
 
 if __name__ == "__main__":
     main()
