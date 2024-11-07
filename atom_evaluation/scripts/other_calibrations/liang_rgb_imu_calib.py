@@ -12,7 +12,6 @@ import cv2
 from prettytable import PrettyTable
 from atom_calibration.collect import patterns
 import tf
-import math
 
 from atom_core.dataset_io import filterCollectionsFromDataset, loadResultsJSON
 from atom_core.atom import getTransform, getChain
@@ -132,7 +131,7 @@ def main():
     # ---------------------------------------
 
     # Calculate camera-to-pattern tf (c_T_p/H_cw in the paper) for each collection
-    c_T_p_lst = [] # list of camera to pattern 4x4 transforms
+    c_T_p_lst = [] # list of tuples (collection, camera to pattern 4x4 transforms)
 
     for collection_key, collection in dataset['collections'].items():
 
@@ -166,10 +165,25 @@ def main():
         
         # Convert to 4x4 transform and add to list
         c_T_p = traslationRodriguesToTransform(tvec, rvec)
-        c_T_p_lst.append(c_T_p)
+        c_T_p_lst.append((collection_key, c_T_p))
+        
+    
+    # Get the interframe c_T_p (H_cij in the paper)
+    # These will be stored in a dictionary where the key is name of the collections (i-j)
+    interframe_c_T_p_dict = {}
 
-        print(c_T_p)
+    for i in range(len(c_T_p_lst) - 1):
+        j = i+1        
+        key_name = str(c_T_p_lst[i][0]) + '-' + str(c_T_p_lst[j][0]) # Get the name of the key for the dict
+        c_T_p_i = c_T_p_lst[i][1]
+        c_T_p_j_inv = np.linalg.inv(c_T_p_lst[j][1])
+        
+        # Equation 17 from the original paper states that the tranformation matrix of the camera from collection i to collection j is equal to the c_T_p in collection i multiplied by its inverse in collection j
+        interframe_c_T_p = np.dot(c_T_p_i, c_T_p_j_inv) 
+        
+        interframe_c_T_p_dict[key_name] = interframe_c_T_p # Save to the dict
 
+    
 
 if __name__ == "__main__":
     main()
