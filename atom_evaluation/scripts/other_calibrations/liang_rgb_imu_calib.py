@@ -6,6 +6,9 @@ Implementation of an ATOM-compatible alternative RGB-IMU calibration method desc
 
 import argparse
 from copy import deepcopy
+import copy
+import random
+import sys
 from colorama import Fore
 import numpy as np
 import cv2
@@ -15,10 +18,10 @@ import tf
 
 from atom_core.dataset_io import filterCollectionsFromDataset, loadResultsJSON
 from atom_core.atom import getTransform, getChain
-from atom_core.geometry import traslationRodriguesToTransform
+from atom_core.geometry import matrixToTranslationRodrigues, traslationRodriguesToTransform
 from atom_core.naming import generateKey
 from atom_core.transformations import compareTransforms
-from atom_core.utilities import atomError, compareAtomTransforms
+from atom_core.utilities import atomError, compareAtomTransforms, createLambdaExpressionsForArgs
 
 
 def getCameraIntrinsicsFromDataset(dataset, camera):
@@ -48,6 +51,29 @@ def getPatternConfig(dataset, pattern):
 
     return nx, ny, square, inner_square, objp
 
+def normalize_vector(vector):
+    vector_norm = np.linalg.norm(vector)
+
+    if  vector_norm != 0:
+        normalized_vector = vector / vector_norm
+    else:
+        normalized_vector = vector # Zero-vector case
+
+    return normalized_vector
+
+def generate_skew_symmetric_matrix_from_vector(vector):
+
+    skew_symmetric_matrix = np.zeros((3,3))
+
+    skew_symmetric_matrix[0,1] = -vector[2]
+    skew_symmetric_matrix[0,2] = vector[1]
+    skew_symmetric_matrix[1,0] = vector[2]
+    skew_symmetric_matrix[1,2] = -vector[0]
+    skew_symmetric_matrix[2,0] = -vector[1]
+    skew_symmetric_matrix[2,1] = vector[0]
+
+    return skew_symmetric_matrix
+
 def main():
 
     ########################################
@@ -70,7 +96,11 @@ def main():
     ap.add_argument("-uic", "--use_incomplete_collections", action="store_true", default=False, help="Remove any collection which does not have a detection for all sensors.", )
     ap.add_argument("-ctgt", "--compare_to_ground_truth", action="store_true", help="If the system being calibrated is simulated, directly compare the TFs to the ground truth.")
  
-    args = vars(ap.parse_args())
+    # Roslaunch adds two arguments (__name and __log) that break our parser. Lets remove those.
+    arglist = [x for x in sys.argv[1:] if not x.startswith("__")]
+    # these args have the selection functions as strings
+    args_original = vars(ap.parse_args(args=arglist))
+    args = createLambdaExpressionsForArgs(args_original)  # selection functions are now lambdas
 
     json_file = args['json_file']
     collection_selection_function = args['collection_selection_function']
@@ -141,71 +171,123 @@ def main():
     # --- Implementation
     # ---------------------------------------
 
-    # Calculate camera-to-pattern tf (c_T_p/H_cw in the paper) and imu_T_w for each collection
-    c_T_p_lst = [] # list of tuples (collection, camera to pattern 4x4 transforms)
-    imu_T_w_lst = []
+    # RANSAC parameters
+    iter_num = 10
+    threshold = 5
+    num_samples = 10
 
-    for collection_key, collection in dataset['collections'].items():
+    for ransac_iteration in range(iter_num):
+        # Create a copy of the original dataset
+        dataset_to_use = copy.deepcopy(dataset)
+    
+        # Pick random collections to be deleted
+        num_samples_deleted = len(dataset_to_use["collections"]) - num_samples
+        collections_to_delete = random.sample(dataset_to_use["collections"].keys(), num_samples_deleted)
+    
+        for c in collections_to_delete:
+            del dataset_to_use["collections"][c]
+    
+        # Now we have a dataset with only the collections to be used in this iteration of RANSAC
+    
+        # Calculate camera-to-pattern tf (c_T_p/H_cw in the paper) and imu_T_w for each collection
+        c_T_p_lst = [] # list of tuples (collection, camera to pattern 4x4 transforms)
+        imu_T_w_lst = []
+    
+        for collection_key, collection in dataset_to_use['collections'].items():
+    
+            # Pattern not detected by sensor in collection
+            if not collection['labels'][args['pattern']][args['camera']]['detected']:
+                continue        
+            
+    
+            # Build a numpy array with the charuco corners
+            corners = np.zeros(
+                (len(collection['labels'][args['pattern']][args['camera']]['idxs']), 1, 2), dtype=float)
+            ids = list(range(0, len(collection['labels'][args['pattern']][args['camera']]['idxs'])))
+            for idx, point in enumerate(collection['labels'][args['pattern']][args['camera']]['idxs']):
+                corners[idx, 0, 0] = point['x']
+                corners[idx, 0, 1] = point['y']
+                ids[idx] = point['id']
+    
+            # Find pose of the camera w.r.t the chessboard
+            np_ids = np.array(ids, dtype=int)
+            rvec, tvec = None, None
+            _, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(np.array(corners, dtype=np.float32),
+                                                                np_ids, pattern.board,
+                                                                K, D, rvec, tvec)
+            
+            # Convert to 4x4 transform and add to list
+            c_T_p = traslationRodriguesToTransform(tvec, rvec)
+            c_T_p_lst.append((collection_key, c_T_p))
+            
+            
+            # Get tf through FK. We can do this because the tfs in the dataset (in simulation) are GT.
+            # TODO: Ultimately, this is not what we want to do. We are supposed to integrate IMU data to get the necessary TFs. This FK method is an intermediate step. Create an option for this to be enable for when IMU data integration is implemented.
+            imu_T_w = getTransform(
+                from_frame = imu_link_name,
+                to_frame = world_link_name,
+                transforms = collection['transforms']
+            )
+    
+            imu_T_w_lst.append((collection_key, imu_T_w))
+    
+        # Get the interframe c_T_p (H_cij in the paper)
+        # These will be stored in a dictionary where the key is name of the collections (i-j)
+        interframe_tfs_dict = {}
+    
+        for i in range(len(c_T_p_lst) - 1):
+            j = i+1
+            key_name = str(c_T_p_lst[i][0]) + '-' + str(c_T_p_lst[j][0]) # Get the name of the key for the dict
+            # Create an empty dict for each adjacent collection combination so it can hold both c_T and imu_T
+            interframe_tfs_dict[key_name] = {}
+    
+            # Equation 17 from the original paper states that the tranformation matrix of the camera from collection i to collection j (c_T_ij) is equal to the c_T_p in collection i multiplied by its inverse in collection j
+            c_T_p_i = c_T_p_lst[i][1]
+            c_T_p_j_inv = np.linalg.inv(c_T_p_lst[j][1])
+            interframe_c_T = np.dot(c_T_p_i, c_T_p_j_inv)
+            
+            # For now, we can determine the interframe imu transforms with a similar logic. imu_T_w_i * imu_T_w_j_inv == imu_T_ij
+            imu_T_w_i = imu_T_w_lst[i][1]
+            # print(imu_T_w_i)
+            imu_T_w_j_inv = np.linalg.inv(imu_T_w_lst[j][1])
+            # print(imu_T_w_j_inv)
+            interframe_imu_T = np.dot(imu_T_w_i, imu_T_w_j_inv)
+            
+            # Save to the dict
+            interframe_tfs_dict[key_name]["c_T"] = interframe_c_T
+            interframe_tfs_dict[key_name]["imu_T"] = interframe_imu_T
+    
+        # print(interframe_tfs_dict)
+    
+        # With the adjacent collection combinations set up and the interframe tfs calculated, we can perform the calculations to determine the transformation between the camera and the IMU, c_T_imu (H_cg in the paper)
+        for collection_combination_key, collection_combination in interframe_tfs_dict.items():
+    
+            # Get Rodrigues vectors
+            imu_T_ij = collection_combination["imu_T"]
+            imu_t_ij, imu_r_ij = matrixToTranslationRodrigues(imu_T_ij)
+            
+            c_T_ij = collection_combination["c_T"]
+            c_t_ij, c_r_ij = matrixToTranslationRodrigues(c_T_ij)
+            
+            # Normalize Rodrigues vectors
+            normalized_imu_r_ij = normalize_vector(imu_r_ij)
+            normalized_c_r_ij = normalize_vector(c_r_ij)
 
-        # Pattern not detected by sensor in collection
-        if not collection['labels'][args['pattern']][args['camera']]['detected']:
-            continue        
-        
+            # Get eigenvectors of imu_r_ij and c_r_ij (P_gij and P_cij in the paper)
+            eigenvector_imu_r_ij = 2 * np.sin(np.linalg.norm(imu_r_ij)/2) * normalized_imu_r_ij
+            eigenvector_c_r_ij = 2 * np.sin(np.linalg.norm(c_r_ij)/2) * normalized_c_r_ij
 
-        # Build a numpy array with the charuco corners
-        corners = np.zeros(
-            (len(collection['labels'][args['pattern']][args['camera']]['idxs']), 1, 2), dtype=float)
-        ids = list(range(0, len(collection['labels'][args['pattern']][args['camera']]['idxs'])))
-        for idx, point in enumerate(collection['labels'][args['pattern']][args['camera']]['idxs']):
-            corners[idx, 0, 0] = point['x']
-            corners[idx, 0, 1] = point['y']
-            ids[idx] = point['id']
+            # Now we need to solve equation (23) from the paper. We want to solve for the initial rotation vector (P_cg').
+            # First, we define the skew-symmetric matrix
+            # A and b for linear least squares solver -> minimize the residual ||Ax - b||
+            A = generate_skew_symmetric_matrix_from_vector(eigenvector_imu_r_ij + eigenvector_c_r_ij)
+            b = eigenvector_c_r_ij - eigenvector_imu_r_ij
 
-        # Find pose of the camera w.r.t the chessboard
-        np_ids = np.array(ids, dtype=int)
-        rvec, tvec = None, None
-        _, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(np.array(corners, dtype=np.float32),
-                                                             np_ids, pattern.board,
-                                                             K, D, rvec, tvec)
-        
-        # Convert to 4x4 transform and add to list
-        c_T_p = traslationRodriguesToTransform(tvec, rvec)
-        c_T_p_lst.append((collection_key, c_T_p))
-        
-        
-        # Get tf through FK. We can do this because the tfs in the dataset (in simulation) are GT.
-        # TODO: Ultimately, this is not what we want to do. We are supposed to integrate IMU data to get the necessary TFs. This FK method is an intermediate step. Create an option for this to be enable for when IMU data integration is implemented.
-        imu_T_w = getTransform(
-            from_frame = imu_link_name,
-            to_frame = world_link_name,
-            transforms = collection['transforms']
-        )
+            x, _, _, _ = np.linalg.lstsq(A,b,rcond=None)
 
-        imu_T_w_lst.append((collection_key, imu_T_w))
-
-    # Get the interframe c_T_p (H_cij in the paper)
-    # These will be stored in a dictionary where the key is name of the collections (i-j)
-    interframe_tfs_dict = {}
-
-    for i in range(len(c_T_p_lst) - 1):
-        j = i+1
-        key_name = str(c_T_p_lst[i][0]) + '-' + str(c_T_p_lst[j][0]) # Get the name of the key for the dict
-        # Create an empty dict for each adjacent collection combination so it can hold both c_T and imu_T
-        interframe_tfs_dict[key_name] = {}
-
-        # Equation 17 from the original paper states that the tranformation matrix of the camera from collection i to collection j (c_T_ij) is equal to the c_T_p in collection i multiplied by its inverse in collection j
-        c_T_p_i = c_T_p_lst[i][1]
-        c_T_p_j_inv = np.linalg.inv(c_T_p_lst[j][1])
-        interframe_c_T = np.dot(c_T_p_i, c_T_p_j_inv)
-        
-        # For now, we can determine the interframe imu transforms with a similar logic. imu_T_w_i * imu_T_w_j_inv == imu_T_ij
-        imu_T_w_i = imu_T_w_lst[i][1]
-        imu_T_w_j_inv = np.linalg.inv(imu_T_w_lst[j][1])
-        interframe_imu_T = np.dot(imu_T_w_i, imu_T_w_j_inv)
-        
-        # Save to the dict
-        interframe_tfs_dict[key_name]["c_T"] = interframe_c_T
-        interframe_tfs_dict[key_name]["imu_T"] = interframe_imu_T
-
+            print(x)
+            
+    
+    
 if __name__ == "__main__":
     main()
