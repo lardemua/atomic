@@ -7,6 +7,7 @@ Implementation of an ATOM-compatible alternative RGB-IMU calibration method desc
 import argparse
 from copy import deepcopy
 import copy
+import math
 import random
 import sys
 from colorama import Fore
@@ -15,10 +16,11 @@ import cv2
 from prettytable import PrettyTable
 from atom_calibration.collect import patterns
 import tf
+import scipy.linalg
 
 from atom_core.dataset_io import filterCollectionsFromDataset, loadResultsJSON
 from atom_core.atom import getTransform, getChain
-from atom_core.geometry import matrixToTranslationRodrigues, traslationRodriguesToTransform
+from atom_core.geometry import matrixToTranslationRodrigues, matrixToTranslationRotation, traslationRodriguesToTransform
 from atom_core.naming import generateKey
 from atom_core.transformations import compareTransforms
 from atom_core.utilities import atomError, compareAtomTransforms, createLambdaExpressionsForArgs
@@ -177,6 +179,9 @@ def main():
     num_samples = 10
 
     for ransac_iteration in range(iter_num):
+        
+        print("\n#####################################\n# RANSAC iteration " + str(ransac_iteration) + "...\n#####################################\n")
+
         # Create a copy of the original dataset
         dataset_to_use = copy.deepcopy(dataset)
     
@@ -280,14 +285,28 @@ def main():
             # Now we need to solve equation (23) from the paper. We want to solve for the initial rotation vector (P_cg').
             # First, we define the skew-symmetric matrix
             # A and b for linear least squares solver -> minimize the residual ||Ax - b||
+            # x is out initial rotation vector (P_cg')
             A = generate_skew_symmetric_matrix_from_vector(eigenvector_imu_r_ij + eigenvector_c_r_ij)
             b = eigenvector_c_r_ij - eigenvector_imu_r_ij
 
-            x, _, _, _ = np.linalg.lstsq(A,b,rcond=None)
+            x, _, _, _ = scipy.linalg.lstsq(A,b)
 
-            print(x)
+            # Now we compute the rotation vector with equation (25) (P_cg)
+            c_P_imu = (2 * x) / (math.sqrt(1 + (np.linalg.norm(x)**2)))
+
+            # Now the rotation matrix - equation (26)            
+            c_R_imu = (1 - (np.linalg.norm(c_P_imu)**2 / 2)) * np.eye(3) + (1/2) * (np.dot(c_P_imu, c_P_imu.T) + math.sqrt(4 - np.linalg.norm(c_P_imu)**2) * generate_skew_symmetric_matrix_from_vector(c_P_imu))
+
+            # Translation vector            
+            imu_t_ij, imu_R_ij = matrixToTranslationRotation(imu_T_ij)
+
+            try:
+                c_t_imu = np.linalg.inv(imu_R_ij - np.eye(3))
+            except:
+                print("Invalid matrices when calculating c_t_imu for collection combination " + collection_combination_key + ", ignoring collection combination...")
+                continue
             
-    
-    
+            
+            
 if __name__ == "__main__":
     main()
