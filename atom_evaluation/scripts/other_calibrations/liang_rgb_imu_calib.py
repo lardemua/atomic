@@ -20,7 +20,7 @@ import scipy.linalg
 
 from atom_core.dataset_io import filterCollectionsFromDataset, loadResultsJSON
 from atom_core.atom import getTransform, getChain
-from atom_core.geometry import matrixToTranslationRodrigues, matrixToTranslationRotation, traslationRodriguesToTransform
+from atom_core.geometry import matrixToTranslationRodrigues, matrixToTranslationRotation, translationRotationToTransform, traslationRodriguesToTransform
 from atom_core.naming import generateKey
 from atom_core.transformations import compareTransforms
 from atom_core.utilities import atomError, compareAtomTransforms, createLambdaExpressionsForArgs
@@ -245,35 +245,39 @@ def main():
             key_name = str(c_T_p_lst[i][0]) + '-' + str(c_T_p_lst[j][0]) # Get the name of the key for the dict
             # Create an empty dict for each adjacent collection combination so it can hold both c_T and imu_T
             interframe_tfs_dict[key_name] = {}
-    
+
             # Equation 17 from the original paper states that the tranformation matrix of the camera from collection i to collection j (c_T_ij) is equal to the c_T_p in collection i multiplied by its inverse in collection j
             c_T_p_i = c_T_p_lst[i][1]
             c_T_p_j_inv = np.linalg.inv(c_T_p_lst[j][1])
             interframe_c_T = np.dot(c_T_p_i, c_T_p_j_inv)
-            
+
             # For now, we can determine the interframe imu transforms with a similar logic. imu_T_w_i * imu_T_w_j_inv == imu_T_ij
             imu_T_w_i = imu_T_w_lst[i][1]
             # print(imu_T_w_i)
             imu_T_w_j_inv = np.linalg.inv(imu_T_w_lst[j][1])
             # print(imu_T_w_j_inv)
             interframe_imu_T = np.dot(imu_T_w_i, imu_T_w_j_inv)
-            
+
             # Save to the dict
             interframe_tfs_dict[key_name]["c_T"] = interframe_c_T
             interframe_tfs_dict[key_name]["imu_T"] = interframe_imu_T
-    
+
         # print(interframe_tfs_dict)
-    
+
         # With the adjacent collection combinations set up and the interframe tfs calculated, we can perform the calculations to determine the transformation between the camera and the IMU, c_T_imu (H_cg in the paper)
+
+        # List of c_T_imu values calculated for averaging later
+        c_T_imu_lst = []
+
         for collection_combination_key, collection_combination in interframe_tfs_dict.items():
-    
+
             # Get Rodrigues vectors
             imu_T_ij = collection_combination["imu_T"]
             imu_t_ij, imu_r_ij = matrixToTranslationRodrigues(imu_T_ij)
-            
+
             c_T_ij = collection_combination["c_T"]
             c_t_ij, c_r_ij = matrixToTranslationRodrigues(c_T_ij)
-            
+
             # Normalize Rodrigues vectors
             normalized_imu_r_ij = normalize_vector(imu_r_ij)
             normalized_c_r_ij = normalize_vector(c_r_ij)
@@ -298,15 +302,21 @@ def main():
             c_R_imu = (1 - (np.linalg.norm(c_P_imu)**2 / 2)) * np.eye(3) + (1/2) * (np.dot(c_P_imu, c_P_imu.T) + math.sqrt(4 - np.linalg.norm(c_P_imu)**2) * generate_skew_symmetric_matrix_from_vector(c_P_imu))
 
             # Translation vector            
-            imu_t_ij, imu_R_ij = matrixToTranslationRotation(imu_T_ij)
+            _, imu_R_ij = matrixToTranslationRotation(imu_T_ij)
 
             try:
-                c_t_imu = np.linalg.inv(imu_R_ij - np.eye(3))
+                c_t_imu = np.dot(np.linalg.inv(imu_R_ij - np.eye(3)), np.dot(c_R_imu,c_t_ij.T) - imu_t_ij.T)
             except:
-                print("Invalid matrices when calculating c_t_imu for collection combination " + collection_combination_key + ", ignoring collection combination...")
+                print("Invalid matrices when calculating c_t_imu for collection combination " + collection_combination_key + ", ignoring...")
                 continue
-            
-            
-            
+
+            c_T_imu = translationRotationToTransform(c_t_imu, c_R_imu)
+
+            # The paper implies c_T_imu is averaged, as only one value is used to calculate the error (see Figure 5)
+            c_T_imu_lst.append(c_T_imu)
+
+        c_T_imu = np.average(c_T_imu_lst, axis=0)
+
+
 if __name__ == "__main__":
     main()
