@@ -266,56 +266,95 @@ def main():
 
         # With the adjacent collection combinations set up and the interframe tfs calculated, we can perform the calculations to determine the transformation between the camera and the IMU, c_T_imu (H_cg in the paper)
 
-        # List of c_T_imu values calculated for averaging later
-        c_T_imu_lst = []
-
+        tmp_i = 1
+        # In this next for loop, collection combinations where the interframe rotation is null are filtered out. We need to keep a record of the collection combinations which were ignored to ignore once more when we iterate once again through this dictionary
+        # NOTE: maybe using del would be cleaner
+        collection_combination_keys_to_ignore = []
         for collection_combination_key, collection_combination in interframe_tfs_dict.items():
 
-            # Get Rodrigues vectors
+            # Get Rotation Matrices
             imu_T_ij = collection_combination["imu_T"]
-            imu_t_ij, imu_r_ij = matrixToTranslationRodrigues(imu_T_ij)
-
             c_T_ij = collection_combination["c_T"]
-            c_t_ij, c_r_ij = matrixToTranslationRodrigues(c_T_ij)
 
-            # Normalize Rodrigues vectors
-            normalized_imu_r_ij = normalize_vector(imu_r_ij)
-            normalized_c_r_ij = normalize_vector(c_r_ij)
+            imu_R_ij = imu_T_ij[:3,:3]
+            c_R_ij = c_T_ij[:3,:3]
 
-            # Get eigenvectors of imu_r_ij and c_r_ij (P_gij and P_cij in the paper)
-            eigenvector_imu_r_ij = 2 * np.sin(np.linalg.norm(imu_r_ij)/2) * normalized_imu_r_ij
-            eigenvector_c_r_ij = 2 * np.sin(np.linalg.norm(c_r_ij)/2) * normalized_c_r_ij
+            # Get Rodrigues vectors
+            imu_r_ij, _ = cv2.Rodrigues(imu_R_ij)
+            c_r_ij, _ = cv2.Rodrigues(c_R_ij)            
 
-            # Now we need to solve equation (23) from the paper. We want to solve for the initial rotation vector (P_cg').
-            # First, we define the skew-symmetric matrix
-            # A and b for linear least squares solver -> minimize the residual ||Ax - b||
-            # x is out initial rotation vector (P_cg')
-            A = generate_skew_symmetric_matrix_from_vector(eigenvector_imu_r_ij + eigenvector_c_r_ij)
-            b = eigenvector_c_r_ij - eigenvector_imu_r_ij
-
-            x, _, _, _ = scipy.linalg.lstsq(A,b)
-
-            # Now we compute the rotation vector with equation (25) (P_cg)
-            c_P_imu = (2 * x) / (math.sqrt(1 + (np.linalg.norm(x)**2)))
-
-            # Now the rotation matrix - equation (26)            
-            c_R_imu = (1 - (np.linalg.norm(c_P_imu)**2 / 2)) * np.eye(3) + (1/2) * (np.dot(c_P_imu, c_P_imu.T) + math.sqrt(4 - np.linalg.norm(c_P_imu)**2) * generate_skew_symmetric_matrix_from_vector(c_P_imu))
-
-            # Translation vector            
-            _, imu_R_ij = matrixToTranslationRotation(imu_T_ij)
-
-            try:
-                c_t_imu = np.dot(np.linalg.inv(imu_R_ij - np.eye(3)), np.dot(c_R_imu,c_t_ij.T) - imu_t_ij.T)
-            except:
-                print("Invalid matrices when calculating c_t_imu for collection combination " + collection_combination_key + ", ignoring...")
+            # Calculate the norms and normalize
+            norm_imu_r_ij = np.linalg.norm(imu_r_ij)
+            norm_c_r_ij = np.linalg.norm(c_r_ij)
+            
+            if (norm_imu_r_ij == 0 or norm_c_r_ij == 0):
+                print("Null rotation in collection combination " + collection_combination_key + "... Ignoring...")
+                collection_combination_keys_to_ignore.append(collection_combination_key)
                 continue
 
-            c_T_imu = translationRotationToTransform(c_t_imu, c_R_imu)
+            normalized_imu_r_ij = imu_r_ij / norm_imu_r_ij
+            normalized_c_r_ij = c_r_ij / norm_c_r_ij
 
-            # The paper implies c_T_imu is averaged, as only one value is used to calculate the error (see Figure 5)
-            c_T_imu_lst.append(c_T_imu)
+            # Calculate imu_P_ij and c_P_ij
+            imu_P_ij = 2 * np.sin(norm_imu_r_ij / 2) * normalized_imu_r_ij
+            c_P_ij = 2 * np.sin(norm_c_r_ij / 2) * normalized_c_r_ij
 
-        c_T_imu = np.average(c_T_imu_lst, axis=0)
+            tmp_A = generate_skew_symmetric_matrix_from_vector(imu_P_ij + c_P_ij)
+            tmp_b = c_P_ij - imu_P_ij
+
+            if tmp_i == 1:
+                A = tmp_A
+                b = tmp_b
+            else:
+                A = np.vstack((A, tmp_A))
+                b = np.vstack((b, tmp_b))
+
+            tmp_i += 1
+            
+        # Solving equation (23)
+        pinv_A = np.linalg.pinv(A)
+        c_P_imu_prime = pinv_A.dot(b)
+        
+        c_P_imu = (2 * c_P_imu_prime) / np.sqrt(1 + np.linalg.norm(c_P_imu_prime)**2)
+        c_P_imu_transposed = c_P_imu.T
+
+        c_R_imu = (1 - ((np.linalg.norm(c_P_imu)**2)/2)) * np.eye(3) + (1/2) * (c_P_imu.dot(c_P_imu_transposed) + np.sqrt(4 - np.linalg.norm(c_P_imu)**2) * generate_skew_symmetric_matrix_from_vector(c_P_imu))
+
+        tmp_i = 1
+        for collection_combination_key, collection_combination in interframe_tfs_dict.items():
+            
+            # Ignore collection combinations that were ignored in the previous for loop
+            if collection_combination_key in collection_combination_keys_to_ignore:
+                continue
+
+            # Get Rotation Matrices
+            imu_T_ij = collection_combination["imu_T"]
+            c_T_ij = collection_combination["c_T"]
+
+            imu_R_ij = imu_T_ij[:3,:3]
+            c_R_ij = c_T_ij[:3,:3]
+
+            # Get translation matrices
+            imu_t_ij = imu_T_ij[:3,3:4]
+            c_t_ij = c_T_ij[:3,3:4]
+
+            tmp_AA = imu_R_ij - np.eye(3)
+            tmp_bb = c_R_imu.dot(c_t_ij) - imu_t_ij
+
+            if tmp_i == 1:
+                AA = tmp_AA
+                bb = tmp_bb
+            else:
+                AA = np.vstack((AA, tmp_AA))
+                bb = np.vstack((bb, tmp_bb))
+
+            tmp_i += 1
+
+        # Solving equation (27)
+        pinv_AA = np.linalg.pinv(AA)
+        c_t_imu = pinv_AA.dot(bb)
+
+        print(c_t_imu)
 
 
 if __name__ == "__main__":
