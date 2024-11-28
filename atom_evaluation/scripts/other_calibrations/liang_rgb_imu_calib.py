@@ -1,29 +1,24 @@
 #!/usr/bin/env python3
 
 """
-Implementation of an ATOM-compatible alternative RGB-IMU calibration method described by Liang et. al (2024
+Implementation of an ATOM-compatible alternative RGB-IMU calibration method described by Liang et. al (2024)
 """
 
 import argparse
 from copy import deepcopy
 import copy
-import math
 import random
 import sys
 from colorama import Fore
 import numpy as np
 import cv2
-from prettytable import PrettyTable
 from atom_calibration.collect import patterns
-import tf
-import scipy.linalg
+
 
 from atom_core.dataset_io import filterCollectionsFromDataset, loadResultsJSON
-from atom_core.atom import getTransform, getChain
-from atom_core.geometry import matrixToTranslationRodrigues, matrixToTranslationRotation, translationRotationToTransform, traslationRodriguesToTransform
-from atom_core.naming import generateKey
-from atom_core.transformations import compareTransforms
-from atom_core.utilities import atomError, compareAtomTransforms, createLambdaExpressionsForArgs
+from atom_core.atom import getTransform 
+from atom_core.geometry import traslationRodriguesToTransform
+from atom_core.utilities import atomError, createLambdaExpressionsForArgs
 
 
 def getCameraIntrinsicsFromDataset(dataset, camera):
@@ -108,7 +103,6 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
         c_T_p = traslationRodriguesToTransform(tvec, rvec)
         c_T_p_lst.append((collection_key, c_T_p))
         
-        
         # Get tf through FK. We can do this because the tfs in the dataset (in simulation) are GT.
         # TODO: Ultimately, this is not what we want to do. We are supposed to integrate IMU data to get the necessary TFs. This FK method is an intermediate step. Create an option for this to be enable for when IMU data integration is implemented.
         imu_T_w = getTransform(
@@ -119,7 +113,7 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
 
         imu_T_w_lst.append((collection_key, imu_T_w))
 
-    # Get the interframe c_T_p (H_cij in the paper)
+    # Get the interframe c_T (H_cij in the paper) and the interframe imu_T (G_gij in the paper)
     # These will be stored in a dictionary where the key is name of the collections (i-j)
     interframe_tfs_dict = {}
 
@@ -144,8 +138,6 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
         # Save to the dict
         interframe_tfs_dict[key_name]["c_T"] = interframe_c_T
         interframe_tfs_dict[key_name]["imu_T"] = interframe_imu_T
-
-    # print(interframe_tfs_dict)
 
     # With the adjacent collection combinations set up and the interframe tfs calculated, we can perform the calculations to determine the transformation between the camera and the IMU, c_T_imu (H_cg in the paper)
 
@@ -342,9 +334,9 @@ def main():
     # ---------------------------------------
 
     # RANSAC parameters
-    iter_num = 10
-    threshold = 5
-    num_samples = 10
+    iter_num = 100
+    threshold = 0.01
+    num_samples = 13
 
     # We need to first calculate the psuedo-ground-truth c_T_imu value against which we will compare the others. This one is calculated with every available collection.
 
@@ -384,7 +376,6 @@ def main():
             D=D
             )
 
-        # c_T_lst = []
         inliers = 0
         for collection_combination_key, collection_combination in interframe_tfs_dict.items():
             c_T = collection_combination["c_T"]
@@ -404,8 +395,30 @@ def main():
             max_inliers = inliers
             best_estimated_c_T_imu = estimated_c_T_imu
 
-    print(best_estimated_c_T_imu)
+    print(c_T_imu)
 
+    tfs = dataset['collections'][selected_collection_key]['transforms']
+    tmp_1 = getTransform(
+        from_frame='rgb_right_link',
+        to_frame='plate',
+        transforms=tfs
+    )
+
+    tmp_2 = getTransform(
+        from_frame='plate',
+        to_frame='left_support',
+        transforms=tfs
+    )
+    
+    tmp_3 = getTransform(
+        from_frame='left_support',
+        to_frame='imu_link',
+        transforms=tfs
+    )
+
+    gt_c_T_imu = tmp_1 @ tmp_2 @ tmp_3
+    print("GT:")
+    print(gt_c_T_imu)
 
 if __name__ == "__main__":
     main()
