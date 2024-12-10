@@ -16,7 +16,7 @@ import cv2
 from atom_calibration.collect import patterns
 
 
-from atom_core.dataset_io import filterCollectionsFromDataset, loadResultsJSON
+from atom_core.dataset_io import addNoiseToInitialGuess, filterCollectionsFromDataset, loadResultsJSON
 from atom_core.atom import getTransform 
 from atom_core.geometry import translationQuaternionToTransform, traslationRodriguesToTransform
 from atom_core.transformations import compareTransforms
@@ -260,7 +260,12 @@ def main():
     ap.add_argument("-p", "--pattern", help="Pattern to be used for calibration.", type=str, required=True)
     ap.add_argument("-uic", "--use_incomplete_collections", action="store_true", default=False, help="Remove any collection which does not have a detection for all sensors.", )
     ap.add_argument("-ctgt", "--compare_to_ground_truth", action="store_true", help="If the system being calibrated is simulated, directly compare the TFs to the ground truth.")
- 
+    ap.add_argument("-nig", "--noisy_initial_guess", nargs=2, metavar=("translation", "rotation"), help="Magnitude of noise to add to the initial guess atomic transformations set before starting optimization [meters, radians].", type=float, default=[0.0, 0.0])
+    ap.add_argument("-ss", "--sample_seed", help="Sampling seed", type=int)
+    ap.add_argument("-rin", "--ransac_iteration_num", help="Number of RANSAC iterations", type=int, default=20)
+    ap.add_argument("-rt", "--ransac_threshold", help="Threshold for inlier classification", type=float, default=0.01)
+    ap.add_argument("-rns", "--ransac_num_samples", help="Number of samples (collections) to use per RANSAC iteration", type=int, default=10)
+    
     # Roslaunch adds two arguments (__name and __log) that break our parser. Lets remove those.
     arglist = [x for x in sys.argv[1:] if not x.startswith("__")]
     # these args have the selection functions as strings
@@ -278,9 +283,8 @@ def main():
     dataset, json_file = loadResultsJSON(json_file, collection_selection_function)
     args['remove_partial_detections'] = True
     dataset = filterCollectionsFromDataset(dataset, args)
-    
+
     dataset_ground_truth = deepcopy(dataset)  # make a copy before adding noise
-    dataset_initial = deepcopy(dataset)  # store initial values
 
     # ---------------------------------------
     # --- Define selected collection key.
@@ -288,6 +292,11 @@ def main():
     # We only need to get one collection because optimized transformations are static, which means they are the same for all collections. Let's select the first key in the dictionary and always get that transformation.
     selected_collection_key = list(dataset["collections"].keys())[0]
     print("Selected collection key is " + str(selected_collection_key))
+
+    # Add noise to the TFs to be calibrated
+    addNoiseToInitialGuess(dataset, args, selected_collection_key)
+
+    dataset_initial = deepcopy(dataset)  # store initial values
 
     # ---------------------------------------
     # Verifications
@@ -337,9 +346,9 @@ def main():
     # ---------------------------------------
 
     # RANSAC parameters
-    iter_num = 20
-    threshold = 0.01
-    num_samples = 10
+    iter_num = args['ransac_iteration_num']
+    threshold = args['ransac_threshold']
+    num_samples = args['ransac_num_samples']
 
     # We need to first calculate the psuedo-ground-truth imu_T_c value against which we will compare the others. This one is calculated with every available collection.
 
