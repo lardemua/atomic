@@ -7,6 +7,7 @@ Implementation of an ATOM-compatible alternative RGB-IMU calibration method desc
 import argparse
 from copy import deepcopy
 import copy
+import math
 import random
 import sys
 from colorama import Fore
@@ -18,6 +19,7 @@ from atom_calibration.collect import patterns
 from atom_core.dataset_io import filterCollectionsFromDataset, loadResultsJSON
 from atom_core.atom import getTransform 
 from atom_core.geometry import translationQuaternionToTransform, traslationRodriguesToTransform
+from atom_core.transformations import compareTransforms
 from atom_core.utilities import atomError, createLambdaExpressionsForArgs
 
 
@@ -394,24 +396,33 @@ def main():
             if error <= threshold:
                 inliers +=1
             
-        print(inliers)
-
         if inliers >= max_inliers:
             max_inliers = inliers
             best_estimated_imu_T_c = estimated_imu_T_c
 
-    print(best_estimated_imu_T_c)
+    print("\n#####################################\n#####################################\n")
 
-    tfs = dataset['collections'][selected_collection_key]['transforms']
+    if not args['compare_to_ground_truth']:
+        print(Fore.CYAN + 'Estimated imu_T_c = \n' + str(best_estimated_imu_T_c) + Fore.RESET)
+
     
-    gt_imu_T_c = getTransform(
-        from_frame='imu_link',
-        to_frame='rgb_right_optical_frame',
-        transforms=tfs
-    )
+    if args['compare_to_ground_truth']:
 
-    print("GT:")
-    print(gt_imu_T_c)
+        tfs = dataset['collections'][selected_collection_key]['transforms']
+        
+        imu_T_c_ground_truth = getTransform(
+            from_frame=imu_link_name,
+            to_frame=camera + '_optical_frame',
+            transforms=tfs
+        )
+
+        print(Fore.GREEN + "Ground Truth imu_T_c = \n" + str(imu_T_c_ground_truth) + Fore.RESET)
+        print(Fore.CYAN + "Estimated imu_T_c = \n" + str(best_estimated_imu_T_c) + Fore.RESET + "\n")
+
+        translation_error, rotation_error, _, _, _, _, _, _ = compareTransforms(best_estimated_imu_T_c, imu_T_c_ground_truth)
+        
+        print('Etrans = ' + str(round(translation_error*1000, 3)) + ' (mm)')
+        print('Erot = ' + str(round(rotation_error*180/math.pi, 3)) + ' (deg)')
 
 if __name__ == "__main__":
     main()
