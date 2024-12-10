@@ -17,7 +17,7 @@ from atom_calibration.collect import patterns
 
 from atom_core.dataset_io import filterCollectionsFromDataset, loadResultsJSON
 from atom_core.atom import getTransform 
-from atom_core.geometry import traslationRodriguesToTransform
+from atom_core.geometry import translationQuaternionToTransform, traslationRodriguesToTransform
 from atom_core.utilities import atomError, createLambdaExpressionsForArgs
 
 
@@ -71,7 +71,7 @@ def generate_skew_symmetric_matrix_from_vector(vector):
 
     return skew_symmetric_matrix
 
-def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, K, D):
+def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, selected_collection_key, K, D):
     
     # Calculate camera-to-pattern tf (c_T_p/H_cw in the paper) and imu_T_w for each collection
     c_T_p_lst = [] # list of tuples (collection, camera to pattern 4x4 transforms)
@@ -101,6 +101,7 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
         
         # Convert to 4x4 transform and add to list
         c_T_p = traslationRodriguesToTransform(tvec, rvec)
+
         c_T_p_lst.append((collection_key, c_T_p))
         
         # Get tf through FK. We can do this because the tfs in the dataset (in simulation) are GT.
@@ -139,7 +140,7 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
         interframe_tfs_dict[key_name]["c_T"] = interframe_c_T
         interframe_tfs_dict[key_name]["imu_T"] = interframe_imu_T
 
-    # With the adjacent collection combinations set up and the interframe tfs calculated, we can perform the calculations to determine the transformation between the camera and the IMU, c_T_imu (H_cg in the paper)
+    # With the adjacent collection combinations set up and the interframe tfs calculated, we can perform the calculations to determine the transformation between the camera and the IMU, imu_T_c (H_cg in the paper)
 
     tmp_i = 1
     # In this next for loop, collection combinations where the interframe rotation is null are filtered out. We need to keep a record of the collection combinations which were ignored to ignore once more when we iterate once again through this dictionary
@@ -156,7 +157,7 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
 
         # Get Rodrigues vectors
         imu_r_ij, _ = cv2.Rodrigues(imu_R_ij)
-        c_r_ij, _ = cv2.Rodrigues(c_R_ij)            
+        c_r_ij, _ = cv2.Rodrigues(c_R_ij)
 
         # Calculate the norms and normalize
         norm_imu_r_ij = np.linalg.norm(imu_r_ij)
@@ -193,7 +194,7 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
     c_P_imu = (2 * c_P_imu_prime) / np.sqrt(1 + np.linalg.norm(c_P_imu_prime)**2)
     c_P_imu_transposed = c_P_imu.T
 
-    c_R_imu = (1 - ((np.linalg.norm(c_P_imu)**2)/2)) * np.eye(3) + (1/2) * (c_P_imu.dot(c_P_imu_transposed) + np.sqrt(4 - np.linalg.norm(c_P_imu)**2) * generate_skew_symmetric_matrix_from_vector(c_P_imu))
+    imu_R_c = (1 - ((np.linalg.norm(c_P_imu)**2)/2)) * np.eye(3) + (1/2) * (c_P_imu.dot(c_P_imu_transposed) + np.sqrt(4 - np.linalg.norm(c_P_imu)**2) * generate_skew_symmetric_matrix_from_vector(c_P_imu))
 
     tmp_i = 1
     for collection_combination_key, collection_combination in interframe_tfs_dict.items():
@@ -214,7 +215,7 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
         c_t_ij = c_T_ij[:3,3:4]
 
         tmp_AA = imu_R_ij - np.eye(3)
-        tmp_bb = c_R_imu.dot(c_t_ij) - imu_t_ij
+        tmp_bb = imu_R_c.dot(c_t_ij) - imu_t_ij
 
         if tmp_i == 1:
             AA = tmp_AA
@@ -227,14 +228,14 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
 
     # Solving equation (27)
     pinv_AA = np.linalg.pinv(AA)
-    c_t_imu = pinv_AA.dot(bb)
+    imu_t_c = pinv_AA.dot(bb)
 
-    c_T_imu = np.zeros((4,4))
-    c_T_imu[:3,:3] = c_R_imu
-    c_T_imu[:3,3:4] = c_t_imu
-    c_T_imu[3,:] = [0, 0, 0, 1]
+    imu_T_c = np.zeros((4,4))
+    imu_T_c[:3,:3] = imu_R_c
+    imu_T_c[:3,3:4] = imu_t_c
+    imu_T_c[3,:] = [0, 0, 0, 1]
 
-    return c_T_imu, interframe_tfs_dict
+    return imu_T_c, interframe_tfs_dict
 
 def main():
 
@@ -334,15 +335,16 @@ def main():
     # ---------------------------------------
 
     # RANSAC parameters
-    iter_num = 100
+    iter_num = 20
     threshold = 0.01
-    num_samples = 13
+    num_samples = 10
 
-    # We need to first calculate the psuedo-ground-truth c_T_imu value against which we will compare the others. This one is calculated with every available collection.
+    # We need to first calculate the psuedo-ground-truth imu_T_c value against which we will compare the others. This one is calculated with every available collection.
 
-    c_T_imu, _ = estimate_cam_to_imu(
+    imu_T_c, _ = estimate_cam_to_imu(
         dataset=dataset,
         args=args,
+        selected_collection_key=selected_collection_key,
         pattern=pattern,
         imu_link_name=imu_link_name,
         world_link_name=world_link_name,
@@ -366,10 +368,11 @@ def main():
         for c in collections_to_delete:
             del dataset_to_use["collections"][c]
 
-        estimated_c_T_imu, interframe_tfs_dict = estimate_cam_to_imu(
+        estimated_imu_T_c, interframe_tfs_dict = estimate_cam_to_imu(
             dataset=dataset_to_use,
             args=args,
             pattern=pattern,
+            selected_collection_key=selected_collection_key,
             imu_link_name=imu_link_name,
             world_link_name=world_link_name,
             K=K,
@@ -381,7 +384,7 @@ def main():
             c_T = collection_combination["c_T"]
             imu_T = collection_combination["imu_T"]
 
-            estimated_imu_T = estimated_c_T_imu @ c_T @ np.linalg.inv(estimated_c_T_imu)            
+            estimated_imu_T = estimated_imu_T_c @ c_T @ np.linalg.inv(estimated_imu_T_c)            
             estimated_imu_t = estimated_imu_T[:3, 3:4]
 
             imu_t = imu_T[:3, 3:4]
@@ -390,35 +393,25 @@ def main():
             
             if error <= threshold:
                 inliers +=1
+            
+        print(inliers)
 
         if inliers >= max_inliers:
             max_inliers = inliers
-            best_estimated_c_T_imu = estimated_c_T_imu
+            best_estimated_imu_T_c = estimated_imu_T_c
 
-    print(c_T_imu)
+    print(best_estimated_imu_T_c)
 
     tfs = dataset['collections'][selected_collection_key]['transforms']
-    tmp_1 = getTransform(
-        from_frame='rgb_right_link',
-        to_frame='plate',
-        transforms=tfs
-    )
-
-    tmp_2 = getTransform(
-        from_frame='plate',
-        to_frame='left_support',
-        transforms=tfs
-    )
     
-    tmp_3 = getTransform(
-        from_frame='left_support',
-        to_frame='imu_link',
+    gt_imu_T_c = getTransform(
+        from_frame='imu_link',
+        to_frame='rgb_right_optical_frame',
         transforms=tfs
     )
 
-    gt_c_T_imu = tmp_1 @ tmp_2 @ tmp_3
     print("GT:")
-    print(gt_c_T_imu)
+    print(gt_imu_T_c)
 
 if __name__ == "__main__":
     main()
