@@ -8,6 +8,7 @@ import argparse
 from copy import deepcopy
 import copy
 import math
+import os
 import random
 import sys
 from colorama import Fore
@@ -264,6 +265,8 @@ def main():
     ap.add_argument("-rin", "--ransac_iteration_num", help="Number of RANSAC iterations", type=int, default=20)
     ap.add_argument("-rt", "--ransac_threshold", help="Threshold for inlier classification", type=float, default=0.01)
     ap.add_argument("-rns", "--ransac_num_samples", help="Number of samples (collections) to use per RANSAC iteration", type=int, default=10)
+    ap.add_argument("-sfr", "--save_file_results", help="Store the results", action='store_true', default=False)
+    ap.add_argument("-sfrn", "--save_file_results_name", help="Name of csv file to save the results. Default: -test_json/results/{name_of_dataset}_{sensor_source}_to_{sensor_target}_results.csv", type=str, required=False)
     
     # Roslaunch adds two arguments (__name and __log) that break our parser. Lets remove those.
     arglist = [x for x in sys.argv[1:] if not x.startswith("__")]
@@ -512,6 +515,15 @@ def main():
 
             print(table_to_save)
             
+            # save results in csv file
+            if args['save_file_results']:
+                if args['save_file_results_name'] is None:
+                    results_name = os.path.dirname(args['json_file']) + '/liang_fixed_' + args["fixed_sensor"] + '_results.csv'
+                else:
+                    results_name = args['save_file_results_name']
+
+                with open(results_name, 'w', newline='') as f_output:
+                    f_output.write(table_to_save.get_csv_string())
 
 if __name__ == "__main__":
     main()
