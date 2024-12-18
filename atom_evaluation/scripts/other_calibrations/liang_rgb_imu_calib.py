@@ -13,12 +13,15 @@ import sys
 from colorama import Fore
 import numpy as np
 import cv2
+from prettytable import PrettyTable
 from atom_calibration.collect import patterns
+import tf
 
 
 from atom_core.dataset_io import addNoiseToInitialGuess, filterCollectionsFromDataset, loadResultsJSON
 from atom_core.atom import getTransform 
 from atom_core.geometry import translationQuaternionToTransform, traslationRodriguesToTransform
+from atom_core.naming import generateKey
 from atom_core.transformations import compareTransforms
 from atom_core.utilities import atomError, createLambdaExpressionsForArgs
 
@@ -247,19 +250,15 @@ def main():
 
     # Parse command line arguments
     ap = argparse.ArgumentParser()
-    ap.add_argument("-json", "--json_file", type=str, required=True,
-                    help="Json file containing input dataset.")
-    ap.add_argument("-csf", "--collection_selection_function", default=None, type=str,
-                    help="A string to be evaluated into a lambda function that receives a collection name as input and "
-                    "returns True or False to indicate if the collection should be loaded (and used in the "
-                    "optimization). The Syntax is lambda name: f(x), where f(x) is the function in python "
-                    "language. Example: lambda name: int(name) > 5 , to load only collections 6, 7, and onward.")
+    ap.add_argument("-json", "--json_file", type=str, required=True, help="Json file containing input dataset.")
+    ap.add_argument("-csf", "--collection_selection_function", default=None, type=str, help="A string to be evaluated into a lambda function that receives a collection name as input and returns True or False to indicate if the collection should be loaded (and used in the optimization). The Syntax is lambda name: f(x), where f(x) is the function in python language. Example: lambda name: int(name) > 5 , to load only collections 6, 7, and onward.")
     ap.add_argument("-c", "--camera", help="Camera sensor name.", type=str, required=True)
     ap.add_argument("-iln", "--imu_link_name", help="The name of the IMU link.", type=str, required=True)
     ap.add_argument("-wln", "--world_link_name", help="Name of the world coordinate frame.", type=str, required=False, default='world')
     ap.add_argument("-p", "--pattern", help="Pattern to be used for calibration.", type=str, required=True)
     ap.add_argument("-uic", "--use_incomplete_collections", action="store_true", default=False, help="Remove any collection which does not have a detection for all sensors.", )
     ap.add_argument("-ctgt", "--compare_to_ground_truth", action="store_true", help="If the system being calibrated is simulated, directly compare the TFs to the ground truth.")
+    ap.add_argument("-fs", "--fixed_sensor", help="Name of the sensor to fix for the comparison to the ground truth to measure the error in the atomic transformations. If none is provided, the comparison to the ground truth will only evaluate the error of the IMU-camera transformation.", type=str, required=False)
     ap.add_argument("-nig", "--noisy_initial_guess", nargs=2, metavar=("translation", "rotation"), help="Magnitude of noise to add to the initial guess atomic transformations set before starting optimization [meters, radians].", type=float, default=[0.0, 0.0])
     ap.add_argument("-ss", "--sample_seed", help="Sampling seed", type=int)
     ap.add_argument("-rin", "--ransac_iteration_num", help="Number of RANSAC iterations", type=int, default=20)
@@ -305,6 +304,10 @@ def main():
     # Check that the camera has rgb modality
     if not dataset['sensors'][args['camera']]['modality'] == 'rgb':
         atomError('Sensor ' + args['camera'] + ' is not of rgb modality.')
+
+    # Check if the fixed sensor is either the camera or the IMU used for calibration
+    if args["fixed_sensor"] != camera and args["fixed_sensor"] != imu_link_name:
+        atomError("The -fs/--fixed_sensor argument must be equal to either the -c/--camera argument or the -iln/--imu_link_name argument.")
 
     # ---------------------------------------
     # Pattern configuration
@@ -432,6 +435,83 @@ def main():
         
         print('Etrans = ' + str(round(translation_error*1000, 3)) + ' (mm)')
         print('Erot = ' + str(round(rotation_error*180/math.pi, 3)) + ' (deg)')
+
+        if args["fixed_sensor"] != None:
+            
+            print("\n#####################################\nComparing to the ground truth of atomic transformations...\nFixed sensor: "+ Fore.MAGENTA + str(args["fixed_sensor"]) + Fore.RESET + "\n#####################################")
+
+            # If the camera is the fixed sensor
+            if args["fixed_sensor"] == camera:
+                
+                # Find imu_link's parent
+                for transform_key, transform in dataset["collections"][selected_collection_key]["transforms"].items():
+                    if transform["child"] == imu_link_name:
+                        imu_parent_link = transform["parent"]
+                
+                c_T_imu_parent_link = getTransform(
+                    from_frame=camera + "_optical_frame",
+                    to_frame=imu_parent_link,
+                    transforms=dataset["collections"][selected_collection_key]["transforms"]
+                )
+
+                transform_key = generateKey(imu_parent_link, imu_link_name)
+
+                transform_calibrated = np.linalg.inv(best_estimated_imu_T_c @ c_T_imu_parent_link)
+
+                transform_ground_truth = dataset_ground_truth["collections"][selected_collection_key]["transforms"][transform_key]
+                transform_ground_truth = translationQuaternionToTransform(transform_ground_truth["trans"], transform_ground_truth["quat"])
+
+                translation_error, rotation_error, _, _, _, _, _, _ = compareTransforms(transform_calibrated, transform_ground_truth)
+
+                # Save in a table
+                header_to_save = ['Transform', 'Et [m]', 'Erot [rad]']
+                table_to_save = PrettyTable(header_to_save)
+
+                row_table_to_save = [transform_key]
+                row_table_to_save.append(round(translation_error, 6))
+                row_table_to_save.append(round(rotation_error, 6))
+                
+                table_to_save.add_row(row_table_to_save)
+
+            elif args["fixed_sensor"] == imu_link_name:
+                
+                # Find imu_link's parent
+                imu_T_c_parent_link = getTransform(
+                    from_frame=imu_link_name,
+                    to_frame=dataset["sensors"][camera]['calibration_parent'],
+                    transforms=dataset["collections"][selected_collection_key]["transforms"]
+                )
+
+                c_optical_frame_T_c = getTransform(
+                    from_frame=camera + "_optical_frame",
+                    to_frame=dataset["sensors"][camera]['calibration_child'],
+                    transforms=dataset["collections"][selected_collection_key]["transforms"]
+                )
+
+                transform_key = generateKey(
+                    parent=dataset["sensors"][camera]["calibration_parent"],
+                    child=dataset["sensors"][camera]["calibration_child"]
+                )
+
+                transform_calibrated = np.linalg.inv(imu_T_c_parent_link) @ best_estimated_imu_T_c @ c_optical_frame_T_c
+
+                transform_ground_truth = dataset_ground_truth["collections"][selected_collection_key]["transforms"][transform_key]
+                transform_ground_truth = translationQuaternionToTransform(transform_ground_truth["trans"], transform_ground_truth["quat"])
+
+                translation_error, rotation_error, _, _, _, _, _, _ = compareTransforms(transform_calibrated, transform_ground_truth)
+
+                # Save in a table
+                header_to_save = ['Transform', 'Et [m]', 'Erot [rad]']
+                table_to_save = PrettyTable(header_to_save)
+
+                row_table_to_save = [transform_key]
+                row_table_to_save.append(round(translation_error, 6))
+                row_table_to_save.append(round(rotation_error, 6))
+                
+                table_to_save.add_row(row_table_to_save)
+
+            print(table_to_save)
+            
 
 if __name__ == "__main__":
     main()
