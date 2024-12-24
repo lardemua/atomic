@@ -19,6 +19,7 @@ import readchar
 import rospkg
 from colorama import Fore, Style
 import numpy as np
+import tf
 
 # 3rd-party
 from rospy_message_converter import message_converter
@@ -53,6 +54,7 @@ def compareAtomTransforms(transform_1, transform_2):
         transform_2: transformation 2
     """
 
+
     # Create a 4x4 transformation for transform_1
     t1 = quaternion_matrix(transform_1['quat'])
     t1[0:3, 3] = transform_1['trans']
@@ -61,21 +63,28 @@ def compareAtomTransforms(transform_1, transform_2):
     t2 = quaternion_matrix(transform_2['quat'])
     t2[0:3, 3] = transform_2['trans']
 
-    # Method: We will use the following method. If T1 and T2 are the same, then multiplying one by the inverse of the other will produce and identity matrix, with zero translation and rotation. So we will do the multiplication and then evaluation the amount of rotation and translation in the resulting matrix.
+    v = t2[0:3, 3] - t1[0:3, 3]
+
+    # Method: We will use the following method. If T1 and T2 are the same, then multiplying one by the inverse of the other will produce and identity matrix, with zero translation and rotation. So we will do the multiplication and then evaluation of the amount of rotation and translation in the resulting matrix.
     # print('Comparing \nt1= ' + str(t1) + ' \n\nt2=' + str(t2))
 
     t_delta = np.dot(np.linalg.inv(t1), t2)
     # print('t_delta = ' + str(t_delta))
 
     rotation_delta = t_delta[0:3, 0:3]
-    roll, pitch, yaw = euler_from_matrix(rotation_delta)
-
     translation_delta = t_delta[0:3, 3]
+
+    euler_angles_init = tf.transformations.euler_from_quaternion(transform_1['quat'])
+    euler_angles_final = tf.transformations.euler_from_quaternion(transform_2['quat'])
+
+
+    euler_delta = np.subtract(euler_angles_final,euler_angles_init)
+    rotation_error = np.linalg.norm(euler_delta)
+
     # print('translation_delta = ' + str(translation_delta))
 
     # global metrics
-    translation_error = float(abs(np.average(translation_delta)))
-    rotation_error = float(np.average([abs(roll), abs(pitch), abs(yaw)]))
+    translation_error = np.linalg.norm(translation_delta)
 
     return translation_error, rotation_error
 
@@ -144,9 +153,9 @@ def printComparisonToGroundTruth(
     # --------------------------------------------------
     # Evaluate sensor poses
     # --------------------------------------------------
+    header = ['Transform', 'Description', 'Et0 [m]', 'Et [m]', 'Rrot0 [rad]', 'Erot [rad]']
+    table = PrettyTable(header)
     for sensor_key, sensor in dataset["sensors"].items():
-        header = ['Transform', 'Description', 'Et0 [m]', 'Et [m]', 'Rrot0 [rad]', 'Erot [rad]']
-        table = PrettyTable(header)
 
         # Create a table_to_save to be output as a csv file (#977) 
         if args["save_file_results"]:
@@ -187,7 +196,7 @@ def printComparisonToGroundTruth(
     if dataset['calibration_config']['additional_tfs'] is not None:
         for additional_tf_key, additional_tf in dataset['calibration_config']['additional_tfs'].items():
 
-            transform_key = generateKey(additional_tf["parent_link"], sensor["child_link"])
+            transform_key = generateKey(additional_tf["parent_link"], additional_tf["child_link"])
             row = [transform_key, Fore.LIGHTCYAN_EX + additional_tf_key + Style.RESET_ALL]
 
 

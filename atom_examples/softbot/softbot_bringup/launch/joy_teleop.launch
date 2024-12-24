@@ -10,7 +10,7 @@
     <param name="deadzone" value="$(arg deadzone)"/>
   </node>
 
-  <node name="joy_teleop" pkg="alberto_bringup" type="alberto_joy_teleop.py" output="screen">
+  <node name="joy_teleop" pkg="softbot_bringup" type="joy_teleop.py" output="screen">
     <param name="twist_cmd_topic" value="$(arg twist_cmd_topic)"/>
     <param name="joy_topic" value="$(arg joy_topic)"/>
   </node>

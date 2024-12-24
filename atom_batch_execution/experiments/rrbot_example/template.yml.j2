@@ -30,13 +30,13 @@ experiments:
           rosrun atom_calibration calibrate -json {{ dataset_path }}/dataset.json \
           -v -max_nfev 2 -ss {{ run }} \
           -nig {{ e.nig_value }} {{ e.nig_value }} \
-          -csf 'lambda x: int(x) in {{ fold[0] }}' \
+          -csf 'lambda x: x in {{ fold[0] }}' \
           && \
           rosrun atom_evaluation rgb_to_rgb_evaluation \
           -train_json {{ dataset_path }}/atom_calibration.json \
           -test_json {{ dataset_path }}/dataset.json \
           -ss rgb_left -st rgb_right \
-          -csf 'lambda x: int(x) in {{ fold[1] }}' \
+          -csf 'lambda x: x in {{ fold[1] }}' \
           -sfr -sfrn /tmp/rgb_rgb_evaluation.csv
         files_to_collect:
           - '{{ dataset_path }}/atom_calibration.json'

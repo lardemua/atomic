@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <launch>
         <arg name="bag" default="/tmp/tmp.bag"/>
+
 <!--        <param name="/use_sim_time" value="false"/>-->
 
         <!--To record only raw data-->
@@ -19,4 +20,3 @@
         -o $(arg bag)">
         </node>
 </launch>
-

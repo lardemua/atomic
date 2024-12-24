@@ -7,7 +7,6 @@ import getpass
 from datetime import datetime
 
 import numpy as np
-import rospkg
 from atom_calibration.collect.patterns import estimatePatternPosesForCollection, initializePatternsDict
 from atom_core.utilities import atomError, atomPrintOK
 import tf2_ros
@@ -18,6 +17,7 @@ import atom_core.dataset_io
 # 3rd-party
 from networkx.readwrite import json_graph
 import rospy
+import rospkg
 import atom_msgs.srv
 import tf
 from matplotlib import cm
@@ -42,6 +42,7 @@ from atom_msgs.msg import ImageWithRGBLabels, PointCloudWithLidar3DLabels, Depth
 class DataCollector:
 
     def __init__(self, args, server, menu_handler):
+
 
         self.output_folder = resolvePath(args['output_folder'])
 
@@ -94,11 +95,11 @@ class DataCollector:
         self.bridge = CvBridge()
         self.dataset_version = "3.0"  # included joint calibration
         self.joint_state_position_dict = {}
-
-        # print(args['calibration_file'])
+    
         self.config = loadConfig(args['calibration_file'])
         if self.config is None:
             sys.exit(1)  # loadJSON should tell you why.
+        
 
         self.world_link = self.config['world_link']
 

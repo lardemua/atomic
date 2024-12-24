@@ -22,7 +22,7 @@
     Rviz interactive markers are used to set the pose of the sensors.
 
 @arg bag_file  Absolute path to the playing bag.
-    default: $(env ROS_BAGS)/softbot/train_atom_filtered.bag
+    default: $(env ROS_BAGS)/softbot/long_bag/long_bag1_atom_filtered.bag
 @arg bag_start Playback starting time (in seconds). default: 0.0
 @arg bag_rate  Playback rate. default: 1.0
 @arg marker_size  Size of the markers. default: 0.5
@@ -36,7 +36,7 @@
     <arg name="output_file" default="$(find softbot_calibration)/urdf/initial_estimate.urdf.xacro"/>
     <arg name="rviz_file" default="$(find softbot_calibration)/rviz/set_initial_estimate.rviz"/>
     <!-- arguments to be passed onto playbag.launch  -->
-    <arg name="bag_file" default="$(env ROS_BAGS)/softbot/train_atom_filtered.bag"/>
+    <arg name="bag_file" default="$(env ROS_BAGS)/softbot/long_bag/long_bag1_atom_filtered.bag"/>
     <arg name="bag_start" default="0"/>
     <arg name="bag_rate" default="1"/>
     <arg name="marker_size" default="0.5"/>

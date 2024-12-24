@@ -3,7 +3,9 @@
 Runs several calibration executions in batch_execution. A yml file is used to config the batch executions.
 """
 import argparse
+from copy import deepcopy
 import os
+from os.path import isfile
 import shutil
 import subprocess
 import yaml
@@ -14,9 +16,12 @@ from sklearn.model_selection import StratifiedKFold, KFold, LeaveOneOut, Stratif
 from colorama import Fore, Back, Style
 
 from atom_core.config_io import uriReader
-from atom_core.dataset_io import loadJSONFile
+from atom_core.dataset_io import loadJSONFile,filterCollectionsFromDataset
 from atom_core.system import resolvePath, execute
 from atom_core.utilities import atomWarn
+from atom_core.naming import generateCollectionKey
+
+from atom_batch_execution.folder_io import stripAutomaticSuffixes
 
 
 def bprint(text):
@@ -73,8 +78,15 @@ def main():
         file_content = f.read()
         data = yaml.safe_load(file_content)
 
-    # Load dataset
-    dataset = loadJSONFile(data['dataset_path'] + '/dataset.json')
+    dataset = loadJSONFile(data['dataset_path'])
+
+    collections_to_remove = data['collections_to_remove']
+
+    args["collection_selection_function"] = lambda x : int(x) not in collections_to_remove
+    args['use_incomplete_collections'] = None
+    args['remove_partial_detections'] = None
+
+    filterCollectionsFromDataset(dataset,args)
 
     # Generate classes and collection keys
     classes, collection_keys = generateClasses(dataset)
@@ -110,17 +122,28 @@ def main():
 
     else:
         # Print error message if the cross validation type is not supported
-        folds  = [(collection_keys, collection_keys)]
+        folds  = [(range(len(collection_keys)), range(len(collection_keys)))]
         bprint('Running without any cross validation.')
+
+    # Converting folds to a list, in order to iterate over it various times
+    folds = list(folds)
+
+    # Transforming indexes of collections into collection keys
+    fold_list = [[[int(collection_keys[element]) for element in split] for split in fold] for fold in folds]
 
     # Dataset is no longer needed
     del dataset
 
-    # Generate a list of folds
-    fold_list = [[list(train), list(test)] for (train, test) in folds]
+    # Add dataset dirname to data
+    dataset_dirname = os.path.dirname(data["dataset_path"])
+    data["dataset_dirname"] = dataset_dirname
 
     # Add folds to data
     data['folds'] = fold_list
+
+    # Add dataset dirname to data
+    dataset_dirname = os.path.dirname(data["dataset_path"])
+    data["dataset_dirname"] = dataset_dirname
 
     # Template engine1 setup
     file_loader = FileSystemLoader(os.path.dirname(args['template_filename']))
@@ -156,6 +179,7 @@ def main():
         bprint('Executing command:\n' + experiment['cmd'])
 
 
+
         if args['dry_run']:
             bprint('Running in dry run mode...')
             continue
@@ -169,6 +193,15 @@ def main():
 
         # Start executing command.
         execute(experiment['cmd'], verbose=args['verbose'], save_path=experiment_folder)
+
+        # Save experiment settings
+        for experiment_type in data['experiments']:
+            if experiment_type["name"] == stripAutomaticSuffixes(experiment_key,args):
+                print(f"Saving settings file for {Fore.BLUE}{experiment_type['name']}{Style.RESET_ALL}")
+
+                settings_file_path = f"{experiment_folder}/{experiment_type['name']}_settings.yml"
+                yaml.dump(experiment_type, open(settings_file_path, 'w'), sort_keys=False)
+
 
         # Collect stdout_data files
         for file in experiment['files_to_collect']:
@@ -184,6 +217,10 @@ def main():
             filename_out = experiment_folder + '/' + os.path.basename(resolved_file)
             print(Fore.BLUE + Back.YELLOW + 'Copying file ' + resolved_file + ' to ' + filename_out + Style.RESET_ALL)
             execute('cp ' + resolved_file + ' ' + filename_out, verbose=False)
+            
+    
+
+
 
 
 

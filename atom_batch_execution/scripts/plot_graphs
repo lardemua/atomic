@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+"""
+Plots processed results from a batch given a yaml file for configuration
+"""
+import argparse
+import glob
+import os
+import shutil
+from os.path import isfile
+import yaml
+from pprint import pprint
+import csv
+
+from colorama import Fore, Style
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+from atom_core.utilities import atomWarn,atomError
+
+
+
+def computeLambdaConditions(line_dict,args):
+    '''
+    This function will be used to filter which files to take data from
+    '''
+
+    def addConditionToLambda(lambda_expression,condition,operator = "and"):
+
+        if lambda_expression == "":
+            lambda_expression = f"lambda x : {condition}"
+        else:
+            lambda_expression += f" {operator} {condition}"
+
+        return lambda_expression
+
+
+    lambda_expression = ""
+
+    for key,value in line_dict.items():
+
+        # These two keys determine which field to plot, it's not relevant here
+        if key == "ydata" or key == "xfield" or key == "legend":
+            continue
+
+        # Lists determine a range of values to plot
+        if isinstance(value,list):
+            lambda_expression = addConditionToLambda(lambda_expression,f"x['{key}'] >= {value[0]}","and")
+            lambda_expression = addConditionToLambda(lambda_expression,f"x['{key}'] <= {value[1]}","and")
+
+        elif type(value) in (int,float):
+            lambda_expression = addConditionToLambda(lambda_expression,f"x['{key}'] == {value}","and")
+
+        # A bool determines whether to include all available values of a field or not
+        # Being false is equal to not being declared
+        # https://stackoverflow.com/questions/37888620/comparing-boolean-and-int-using-isinstance
+        elif type(value) == bool:
+            # Retrieve the value, if the key doesn't exist .get() returns None
+            if value : 
+                lambda_expression = addConditionToLambda(lambda_expression,f"x.get('{key}')","and")
+            else:
+                lambda_expression = addConditionToLambda(lambda_expression,f"not x.get('{key}')","and")
+
+        # Any other key that isn't listed as a bool or list should be added to the blackblist as well
+        else:
+                lambda_expression = addConditionToLambda(lambda_expression,f"not x.get('{key}')","and")
+
+    if args["verbose"]:
+        print(f"Printing lambda used in filtering files {Fore.BLUE}{lambda_expression}{Style.RESET_ALL}")
+
+
+    lambda_function = eval(lambda_expression)
+
+    return lambda_function,lambda_expression
+
+
+
+
+def main():
+
+    ap = argparse.ArgumentParser()  # Parse command line arguments
+    ap.add_argument("-v", "--verbose", help="Prints the stdout_data of each command to the terminal.",
+                    action='store_true', default=False)
+    ap.add_argument("-ow", "--overwrite", help="Overwrites output folder.",
+                    action='store_true', default=False)
+    ap.add_argument("-rf", "--results_folder", help="Folder containing the processed results",
+                    required=True, type=str)
+    ap.add_argument("-of", "--output_folder", help="Folder where to store the plots' images",
+                    required=True, type=str)
+    ap.add_argument("-df", "--data_filename", help="Yaml containing variables used to compute the plots.",
+                    required=True, type=str)
+    ap.add_argument("-sp", "--show_plots", help="Shows plots",
+                    required=False, action='store_true', default=False)
+
+    args = vars(ap.parse_args())
+    
+    # Load plot configs
+    with open(args["data_filename"], "r") as file:
+        plots_configs = yaml.safe_load(file)
+
+    # Get results paths
+    results_processed_folders = next(os.walk(args["results_folder"]))[1]
+    data_file_paths = glob.glob(f'{args["results_folder"]}/*/*[!_settings.yml]')
+    settings_file_paths = glob.glob(f'{args["results_folder"]}/*/*_settings.yml')
+    
+    # Get all possible experiment settings
+    with open(settings_file_paths[0], "r") as file:
+        settings_file_fields = yaml.safe_load(file)
+
+    settings_file_fields = list(settings_file_fields.keys())
+    settings_file_fields.remove("name")
+
+
+    # Grab data for each plot
+    print(f"Grabbing data from {Fore.BLUE}{args['results_folder']}{Style.RESET_ALL}")
+    for plot_figure in plots_configs.keys():
+
+
+        for plot_line in plots_configs[plot_figure]['data']:
+            filtering_function,lambda_str = computeLambdaConditions(plot_line,args)
+
+            x_data_files_names = []
+            x_data = []
+            y_data = []
+            settings_files_used = []
+            # Get x data
+            for settings_file_path in settings_file_paths:
+                with open(settings_file_path, "r") as file:
+                    settings = yaml.safe_load(file)
+                
+                if filtering_function(settings):
+                    settings_files_used.append(settings_file_path)
+                    x_data_files_names.append(settings["name"])
+                    x_data.append(settings[plot_line['xfield']])
+
+            if args["verbose"]:
+                print("Getting data from these files")
+                pprint(settings_files_used)
+
+            if not x_data_files_names:
+                atomError("No settings files matches were found for the given configuration, check if " + args["data_filename"] + " is well defined")
+
+            # Get y data
+            for name in x_data_files_names:
+                try:
+                    file_path_to_get_data_fom = glob.glob(f'{args["results_folder"]}/{name}/{plot_line["ydata"]["file"]}')[0]
+                except:
+                    atomError(f"Experiment {x_data_files_names} doesn't have data file {plot_line['ydata']['file']}")
+                    exit()
+
+                with open(file_path_to_get_data_fom, mode ='r')as file:
+                  ydata_raw = list(csv.reader(file))
+                
+                for line in ydata_raw:
+                    if line[0] == plot_line["ydata"]["field"]:
+                        y_data.append(round(float(line[1]),4))
+
+            # Sorting data --> https://stackoverflow.com/questions/9764298/given-parallel-lists-how-can-i-sort-one-while-permuting-rearranging-the-other
+            x_data_sorted,y_data_sorted = zip(*sorted(zip(x_data,y_data)))
+
+            plot_line['x_values'] = x_data_sorted
+            plot_line['y_values'] = y_data_sorted
+
+    # ----------- End of loop over entire config to grab xy data
+
+    if args["verbose"]:
+        print(f"Printing all {Fore.BLUE}plot configurations{Style.RESET_ALL}, along with xy data")
+        pprint(plots_configs)
+
+    # Change directory to save files in the results folder
+    cwd = os.getcwd()
+
+    if not os.path.exists(args['output_folder']):  # create stdout_data folder if it does not exist.
+        os.mkdir(args['output_folder'])  # Create the new folder
+    elif os.path.exists(args['output_folder']) and args['overwrite']:
+        atomWarn(f"Found existing {Fore.YELLOW}{args['output_folder']}{Style.RESET_ALL}, overwritting entire diretory because overwrite is {Fore.YELLOW}True{Style.RESET_ALL}")
+        shutil.rmtree(args['output_folder'])  # Create the new folder
+        os.mkdir(args['output_folder'])  # Create the new folder
+
+
+    os.chdir(f"./{args['output_folder']}")
+
+    #Generate plots
+    print(f"Generating {Fore.BLUE}plots{Style.RESET_ALL}")
+    for plot_figure in plots_configs.keys():
+
+        print(f"Storing plot options for {Fore.BLUE}{plot_figure}{Style.RESET_ALL}.")
+        plot_options = plots_configs[plot_figure]["options"]
+        number_of_lines = len(plots_configs[plot_figure]['data'])
+
+        title       = plot_options['title']
+        hide_title  = plot_options.get('hide_title',False)
+        xlabel      = plot_options['xlabel']
+        ylabel      = plot_options['ylabel']
+        colors      = plot_options['colors']
+        linestyles  = plot_options['linestyles']
+        linewidths  = plot_options['linewidths']
+        grid        = plot_options['grid']
+        markersizes = plot_options['markersizes']
+        markers     = plot_options['markers']
+        xscale      = plot_options['xscale']
+        yscale      = plot_options['yscale']
+        xlim        = plot_options.get('xlim')
+        ylim        = plot_options.get('ylim')
+        custom_legend = plot_options.get('custom_legend',(None,None))
+
+        if all(custom_legend):
+            custom_legend = eval(plot_options.get('custom_legend'))
+
+        # Normalizing options to allow them to be defined as lists or individual str/int
+        #Strs
+        if isinstance(colors,str):
+            print(f"Colors {Fore.BLUE}{colors}{Style.RESET_ALL} set as a single {Fore.BLUE}str{Style.RESET_ALL}, expanding to all plots in this figure.")
+            colors = [colors for _ in range(number_of_lines)]
+
+        if isinstance(linestyles,str):
+            print(f"Linestyles {Fore.BLUE}{linestyles}{Style.RESET_ALL} set as a single {Fore.BLUE}str{Style.RESET_ALL}, expanding to all plots in this figure.")
+            linestyles = [linestyles for _ in range(number_of_lines)]
+
+        if isinstance(markers,str):
+            print(f"Markers {Fore.BLUE}{markers}{Style.RESET_ALL} set as a single {Fore.BLUE}str{Style.RESET_ALL}, expanding to all plots in this figure.")
+            markers = [markers for _ in range(number_of_lines)]
+
+        #Ints
+        if isinstance(markersizes,int):
+            print(f"Markersizes {Fore.BLUE}{markersizes}{Style.RESET_ALL} set as a single {Fore.BLUE}int{Style.RESET_ALL}, expanding to all plots in this figure.")
+            markersizes = [markersizes for _ in range(number_of_lines)]
+
+        if isinstance(linewidths,int):
+            print(f"Linewidths {Fore.BLUE}{linewidths}{Style.RESET_ALL} set as a single {Fore.BLUE}int{Style.RESET_ALL}, expanding to all plots in this figure.")
+            linewidths = [linewidths for _ in range(number_of_lines)]
+
+
+        plt.figure()
+        for idx,plot_line in enumerate(plots_configs[plot_figure]['data']):
+
+            x_values = plot_line['x_values']
+            y_values = plot_line['y_values']
+            legend   = plot_line.get('legend')
+
+            # Plotting
+            plt.plot(x_values, y_values, color=colors[idx], linestyle=linestyles[idx], linewidth=linewidths[idx],
+                     markersize = markersizes[idx],marker = markers[idx],label = legend)
+            # Might want to be ommited to be replaced by a caption in papers
+            if not hide_title:
+                plt.title(title)
+
+            plt.xlabel(xlabel)
+            plt.ylabel(ylabel)
+            plt.grid(grid)
+            plt.xscale(xscale)  # Set x-scale
+            plt.yscale(yscale)  # Set y-scale
+
+            # Issue #990
+            # from matplotlib.ticker import MaxNLocator, LogLocator,FormatStrFormatter,ScalarFormatter
+            # import numpy as np
+            # plt.gca().yaxis.set_major_locator(LogLocator(base=10, subs=np.arange(0.1, 1, 0.1), numticks=10))
+            # # plt.gca().yaxis.set_major_formatter(FormatStrFormatter(''))
+            # plt.gca().yaxis.set_major_formatter(ScalarFormatter())
+            # plt.gca().yaxis.set_minor_formatter(ScalarFormatter())
+            # plt.tick_params(axis='y', labelsize=8)  # Adjust the label size here (e.g., 8)
+
+            if legend is not None and not all(custom_legend):
+                plt.legend(prop={'size': 6})
+
+            if all(custom_legend):
+                plt.legend(custom_legend[0], custom_legend[1],prop={'size': 6})
+
+
+            if xlim:
+                plt.xlim(xlim)
+
+            if ylim:
+                plt.ylim(ylim)
+        
+        # Save figure in output folder
+
+        image_file_name = f'{title.replace(" ", "_")}'
+        image_file_name = f'{image_file_name.replace("/", "_")}'
+        # Some characters like / are problematic in filenames
+        # image_file_name = ''.join(filter(lambda x : str.isalnum(x) or x == "_",image_file_name))
+        image_file_name = ''.join(filter(lambda x : x != "," and x != "\n",image_file_name))
+        # image_file_name = f'{image_file_name}.png'
+        image_file_name = f'{image_file_name}.pdf'
+
+        if os.path.isfile(image_file_name) and not args['overwrite']:
+            atomWarn(f'Plot with name {Fore.YELLOW}{image_file_name}{Style.RESET_ALL} found in {Fore.YELLOW}{args["output_folder"]}{Style.RESET_ALL}, not saving')
+        else:
+            print(f'Saving plot {Fore.BLUE}{title}{Style.RESET_ALL} as {Fore.BLUE}{image_file_name}{Style.RESET_ALL} in {Fore.BLUE}{args["output_folder"]}{Style.RESET_ALL}')
+            # plt.savefig(image_file_name,dpi=600)
+            plt.savefig(image_file_name,format="pdf")
+
+        if args["show_plots"]:
+            plt.show()
+
+        plt.close()
+
+    # Getting back to cwd, to prevent confusion if this script is further modified
+    os.chdir(cwd)
+
+if __name__ == "__main__":
+    main()

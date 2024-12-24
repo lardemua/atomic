@@ -36,7 +36,8 @@ description_file: "package://softbot_description/urdf/softbot.urdf.xacro"
 
 # The calibration framework requires a bagfile to extract the necessary data for the calibration.
 # bag_file: "$ROS_BAGS/softbot/train.bag"
-bag_file: "$ROS_BAGS/softbot/train.bag"
+# bag_file: "$ROS_BAGS/softbot/example/train.bag"
+bag_file: "$ROS_BAGS/softbot/long_bag/long_bag1.bag"
 
 # You must define a frame of reference for the optimization process.
 # It must exist in the transformation chains of all the sensors which are being calibrated.
@@ -109,9 +110,9 @@ additional_tfs:
   #           This is the transformation (i.e. link) that we be optimized.
   #
   # EXAMPLE:
-  #base_footprint_to_base_link:
-  #  parent_link: "base_footprint"
-  #  child_link: "base_link"
+  world_to_base_footprint:
+   parent_link: "world"
+   child_link: "base_footprint"
 
 
 # ATOM can also calibrate several parameters of your joints.

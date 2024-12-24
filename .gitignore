@@ -118,6 +118,7 @@ venv.bak/
 .idea/**/usage.statistics.xml
 .idea/**/dictionaries
 .idea/**/shelf
+pyrightconfig.json
 
 # Generated files
 .idea/**/contentModel.xml
@@ -217,6 +218,7 @@ snaps/
 *.vsix
 .vscode/settings.json
 atom_calibration/scripts/deprecated/calibration.code-workspace
+*.code-workspace
 atom.code-workspace
 /atom_evaluation/scripts/incomplete.txt
 /atom_evaluation/scripts/output_total.txt

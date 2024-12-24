@@ -317,7 +317,7 @@
     {
       "child": "base_footprint",
       "from_bag": true,
-      "is_transformation_calibrated": false,
+      "is_transformation_calibrated": true,
       "parent": "world",
       "source": "world",
       "target": "base_footprint",

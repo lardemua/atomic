@@ -160,6 +160,7 @@ class Lidar3DLabeler:
         fields = [PointField('x', 0, PointField.FLOAT32, 1), PointField('y', 4, PointField.FLOAT32, 1),
                   PointField('z', 8, PointField.FLOAT32, 1), PointField('rgba', 12, PointField.UINT32, 1)]
         header = Header()
+        
         header.frame_id = msg.header.frame_id
         header.stamp = msg.header.stamp
         pc_msg = point_cloud2.create_cloud(header, fields, points)
@@ -179,7 +180,7 @@ class Lidar3DLabeler:
 
     def createInteractiveMarker(self, x=0, y=0, z=0):
         self.marker = InteractiveMarker()
-        self.marker.header.frame_id = self.sensor_config['parent_link']
+        self.marker.header.frame_id = self.config['world_link']
         self.marker.pose.position.x = x
         self.marker.pose.position.y = y
         self.marker.pose.position.z = z

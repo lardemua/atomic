@@ -511,6 +511,7 @@ class Optimizer:
                     if param in self.residuals[key]:
                         idx = group.idx[j]
                         self.sparse_matrix[i, idx] = 1
+        
 
     # ---------------------------
     # Print and display

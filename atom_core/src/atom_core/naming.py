@@ -12,6 +12,8 @@ def generateName(name, prefix='', suffix='', separator='_'):
 def generateKey(parent, child, suffix=''):
     return parent + '-' + child + suffix
 
+def generateCollectionKey(collection_number):
+    return f"{collection_number:03d}"
 
 def generateLabeledTopic(topic, collection_key=None, type='2d', suffix=''):
     """Returns a standarized string for labeled sensor msg topics.

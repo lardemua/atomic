@@ -23,22 +23,55 @@ preprocessing:
 experiments:
 {%- for e in experiments %}
   {% for run in runs %}
-    {{ e.name }}_run{{ '%03d' % loop.index }}:
-      cmd: |
-        rosrun atom_calibration calibrate -json {{ dataset_path }}/dataset.json \
-        -v -max_nfev 2 -ss {{ run }} \
-        -nig {{ e.nig_value }} {{ e.nig_value }} \
-        && \
-        rosrun atom_evaluation rgb_to_rgb_evaluation \
-        -train_json {{ dataset_path }}/atom_calibration.json \
-        -test_json $ATOM_DATASETS/softbot/train/dataset.json \
-        -ss front_left_camera -st front_right_camera \
-        -sfr -sfrn /tmp/rgb_rgb_evaluation.csv
-      files_to_collect:
-        - '{{ dataset_path }}/atom_calibration.json'
-        - '{{ dataset_path }}/atom_calibration_params.yml'
-        - '{{ dataset_path }}/command_line_args.yml'
-        - '/tmp/rgb_rgb_evaluation.csv'
+    {% set run_index = loop.index %}
+    {% for fold in folds %}
+      {{ e.name }}_run{{ '%03d' % run_index }}_fold{{ '%03d' % loop.index }}:
+        cmd: |
+          rosrun atom_calibration calibrate -json {{ dataset_path }}/dataset_corrected.json \
+          -v  -ss {{ run }} \
+          -nig {{ e.nig_value }} {{ e.nig_value }} \
+          -csf 'lambda x: x in {{ fold[0] }}' \
+          -ntfv {{ e.ntfv_value }} {{ e.ntfv_value }} \
+          -ntfl "world:base_footprint" \
+          -sce \
+          {%- if not e.calibrate_odom -%}
+             -atsf 'lambda name : name in []' \
+          {%- endif %}
+          && \
+
+          # front_left_camera to front_right_camera evaluation
+          rosrun atom_evaluation rgb_to_rgb_evaluation \
+          -train_json {{ dataset_path }}/atom_calibration.json \
+          -test_json {{ dataset_path }}/dataset_corrected.json \
+          -ss front_left_camera -st front_right_camera \
+          -sfr -sfrn /tmp/rgb_rgb_evaluation.csv \
+          -csf 'lambda x: x in {{ fold[1] }}' \
+          && \
+
+          # front_left_camera to lidar3d evaluation
+          rosrun atom_evaluation lidar_to_rgb_evaluation -rs lidar3d -cs front_left_camera \
+           -train_json {{ dataset_path }}/atom_calibration.json \
+           -test_json  {{ dataset_path }}/dataset_corrected.json \
+          -csf 'lambda x: x in {{ fold[1] }}' \
+           -sfr -sfrn /tmp/lidar3d_rgb_front_left_evaluation.csv \
+           && \
+
+          # front_right_camera to lidar3d evaluation
+          rosrun atom_evaluation lidar_to_rgb_evaluation -rs lidar3d -cs front_right_camera \
+           -train_json {{ dataset_path }}/atom_calibration.json \
+           -test_json  {{ dataset_path }}/dataset_corrected.json \
+           -csf 'lambda x: x in {{ fold[1] }}' \
+           -sfr -sfrn /tmp/lidar3d_rgb_front_right_evaluation.csv
+
+        files_to_collect:    
+          - '{{ dataset_path }}/atom_calibration.json'
+          - '{{ dataset_path }}/atom_calibration_params.yml'
+          - '{{ dataset_path }}/command_line_args.yml'
+          - '{{ dataset_path }}/calibration_errors.csv'
+          - '/tmp/rgb_rgb_evaluation.csv'
+          - '/tmp/lidar3d_rgb_front_left_evaluation.csv'
+          - '/tmp/lidar3d_rgb_front_right_evaluation.csv'
+    {%- endfor %}
   {%- endfor %}
 {%- endfor %}
 # End the loop

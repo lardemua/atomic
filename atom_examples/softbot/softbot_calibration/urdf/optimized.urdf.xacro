@@ -373,7 +373,7 @@
     <child link="lidar3d_plate_link"/>
   </joint>
   <joint name="lidar3d_base_mount_joint" type="fixed">
-    <origin xyz="-0.0015142375046177249 -0.0022052142273190152 -0.000283564068925264" rpy="-0.007757658250765604 0.0009838709879697281 -0.014847674947914611"/>
+    <origin xyz="0.026070094492783986 0.08090068489378434 -0.05268234388155041" rpy="-0.1408262861752613 -0.12753878610701955 0.06246451120781566"/>
     <parent link="lidar3d_plate_link"/>
     <child link="lidar3d_base_link"/>
   </joint>
@@ -493,7 +493,7 @@
     <selfCollide>false</selfCollide>
   </gazebo>
   <joint name="front_left_camera_rgb_joint" type="fixed">
-    <origin xyz="-4.399872653456163e-16 -0.04499999999999956 3.1045954087761856e-16" rpy="-4.440829884921592e-16 4.4301780635402403e-16 4.438903032319087e-16"/>
+    <origin xyz="0.0 -0.045 0.0" rpy="0.0 -0.0 0.0"/>
     <parent link="front_left_camera_link"/>
     <child link="front_left_camera_rgb_frame"/>
   </joint>
@@ -586,7 +586,7 @@
     <selfCollide>false</selfCollide>
   </gazebo>
   <joint name="front_right_camera_rgb_joint" type="fixed">
-    <origin xyz="0.002030911322794242 -0.03938584552044518 -1.2175099096372358e-05" rpy="-0.005222638857532736 0.001007139992505166 -0.0037596367537089353"/>
+    <origin xyz="0.08129789885837509 0.012677215992655845 -0.007999399761853444" rpy="-0.07776858741095248 0.17377759615848334 0.0612649482614982"/>
     <parent link="front_right_camera_link"/>
     <child link="front_right_camera_rgb_frame"/>
   </joint>
