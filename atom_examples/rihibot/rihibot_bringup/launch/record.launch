@@ -20,6 +20,8 @@
         /rgb_hand/image_raw/compressed
         /rgb_hand/camera_info
 
+        /imu
+
         -o $(arg bag)">
     </node>
 
