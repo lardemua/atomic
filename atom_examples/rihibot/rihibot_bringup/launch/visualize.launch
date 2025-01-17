@@ -1,0 +1,7 @@
+<launch>
+
+        <!-- Launch rviz, loading configuration file -->
+        <node name="rviz" pkg="rviz" type="rviz" args="-d $(find rihibot_bringup)/config/config.rviz" required="true" output="screen">
+        </node>
+
+</launch>
