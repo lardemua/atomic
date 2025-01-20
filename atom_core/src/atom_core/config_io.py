@@ -46,35 +46,45 @@ def verifyConfig(config, template_config):
                   str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
 
     sensor_template = template_config['sensors']['hand_camera']
-    for sensor_key, sensor in config['sensors'].items():
-        same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(sensor, sensor_template)
-        if not same_keys:
-            atomError('In config file, sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL + ' does not have the correct keys.\nKeys that should not exist: ' +
-                      str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
+    if config['sensors'] is not None:
+        for sensor_key, sensor in config['sensors'].items():
+            same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(
+                sensor, sensor_template)
+            if not same_keys:
+                atomError('In config file, sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL +
+                          ' does not have the correct keys.\nKeys that should not exist: ' +
+                          str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
 
     if config['additional_tfs'] is not None:
         additional_tf_template = {'parent_link': None, 'child_link': None}
         for additional_tf_key, additional_tf in config['additional_tfs'].items():
-            same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(additional_tf, additional_tf_template)
+            same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(
+                additional_tf, additional_tf_template)
             if not same_keys:
-                atomError('In config file, additional_tf ' + Fore.BLUE + additional_tf_key + Style.RESET_ALL + ' does not have the correct keys.\nKeys that should not exist: ' +
-                          str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
+                atomError(
+                    'In config file, additional_tf ' + Fore.BLUE + additional_tf_key + Style.RESET_ALL
+                    + ' does not have the correct keys.\nKeys that should not exist: ' +
+                    str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
 
     if config['joints'] is not None:
         joint_template = {'params_to_calibrate': None}
         for joint_key, joint in config['joints'].items():
             same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(joint, joint_template)
             if not same_keys:
-                atomError('In config file, joint ' + Fore.BLUE + joint_key + Style.RESET_ALL + ' does not have the correct keys.\nKeys that should not exist: ' +
+                atomError('In config file, joint ' + Fore.BLUE + joint_key + Style.RESET_ALL +
+                          ' does not have the correct keys.\nKeys that should not exist: ' +
                           str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
 
-    calibration_pattern_template = template_config['calibration_patterns']['pattern_1']
-    for calibration_pattern_key, calibration_pattern in config['calibration_patterns'].items():
-        same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(
-            calibration_pattern, calibration_pattern_template)
-        if not same_keys:
-            atomError('In config file, calibration_pattern ' + Fore.BLUE + calibration_pattern_key + Style.RESET_ALL + ' does not have the correct keys.\nKeys that should not exist: ' +
-                      str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
+    if config['calibration_patterns'] is not None:
+        calibration_pattern_template = template_config['calibration_patterns']['pattern_1']
+        for calibration_pattern_key, calibration_pattern in config['calibration_patterns'].items():
+            same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(
+                calibration_pattern, calibration_pattern_template)
+            if not same_keys:
+                atomError('In config file, calibration_pattern ' + Fore.BLUE +
+                          calibration_pattern_key + Style.RESET_ALL +
+                          ' does not have the correct keys.\nKeys that should not exist: ' +
+                          str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
 
 
 def loadConfig(filename, check_paths=True):
@@ -93,12 +103,30 @@ def loadConfig(filename, check_paths=True):
     missing_parameters = verifyConfig(config, template_config)
     # print(missing_parameters)
 
+    if config['sensors'] is None:
+        config['sensors'] = {}
+
+    if config['contacts'] is None:
+        config['contacts'] = {}
+
+    if config['calibration_patterns'] is None:
+        config['calibration_patterns'] = {}
+
+    if config['joints'] is None:
+        config['joints'] = {}
+
+    if config['additional_tfs'] is None:
+        config['additional_tfs'] = {}
+
     if missing_parameters:  # list is not empty
-        print('Your config file ' + Fore.BLUE + filename + Style.RESET_ALL +
-              ' appears to be corrupted. These mandatory parameters are missing: ' + Fore.BLUE +
-              str(missing_parameters) + Style.RESET_ALL + '\nPerhaps your file format is not updated.\n' +
-              'To fix, check scripts ' + Fore.BLUE + 'add_joints_to_config_file' + Style.RESET_ALL + ' and ' +
-              Fore.BLUE + 'add_package_name_to_config_file' + Style.RESET_ALL + ' in atom_calibration/scripts/utilities')
+        print(
+            'Your config file ' + Fore.BLUE + filename + Style.RESET_ALL +
+            ' appears to be corrupted. These mandatory parameters are missing: ' + Fore.BLUE +
+            str(missing_parameters) + Style.RESET_ALL +
+            '\nPerhaps your file format is not updated.\n' + 'To fix, check scripts ' + Fore.BLUE +
+            'add_joints_to_config_file' + Style.RESET_ALL + ' and ' + Fore.BLUE +
+            'add_package_name_to_config_file' + Style.RESET_ALL +
+            ' in atom_calibration/scripts/utilities')
         exit(0)
 
     # Check if description file is ok
@@ -133,9 +161,8 @@ def validateLinks(world_link, sensors, urdf):
         for name, sensor in sensors.items():
             chain = urdf.get_chain(world_link, sensor.link)
             if sensor.parent_link not in chain or sensor.child_link not in chain:
-                print("{}: The links '{}' and '{}' are not part of the same chain.".format(sensor.name,
-                                                                                           sensor.parent_link,
-                                                                                           sensor.child_link))
+                print("{}: The links '{}' and '{}' are not part of the same chain.".format(
+                    sensor.name, sensor.parent_link, sensor.child_link))
                 return False
     except KeyError as e:
         link_name = str(e).strip("'")
@@ -173,7 +200,8 @@ def uriReader(resource):
         fullpath = resolvePath(uri.path)
         relpath = expandToLaunchEnv(uri.path)
     else:
-        raise ValueError('Cannot parse resource "' + resource + '", unknown scheme "' + uri.scheme + '".')
+        raise ValueError(
+            'Cannot parse resource "' + resource + '", unknown scheme "' + uri.scheme + '".')
 
     if not os.path.exists(fullpath):
         atomError(Fore.BLUE + fullpath + Style.RESET_ALL + ' does not exist.')

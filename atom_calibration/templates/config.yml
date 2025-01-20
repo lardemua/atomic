@@ -88,6 +88,32 @@ sensors:
     modality: "rgb"
     throttle:
 
+
+contacts:
+  # Each key will define a contact and its name, which will be use throughout the calibration.
+  # Each contact definition must have the following properties:
+
+  #       type:
+  #           Type of contact.
+  #           Current options: frame_alignment, surface_touch (not supported yet)
+  #       touching_link: 
+  #           The link that is in contact with the touched_link.  
+  #       touched_link:
+  #           The link that is being touched by the touching_link.
+  #       topic_name:
+  #           Name of the ROS topic that contains the message streaming from a contact sensor.
+  #           Not used for type frame_alignment.
+  #
+
+  # contact_1:
+  #   type: "frame_alignment"
+  #   touching_link: "contact_sensor"
+  #   touched_link: "end_effector"
+  #   topic_name: # 
+
+  # You can have more than one contact:
+
+
 # ATOM will calibrate the extrinsic parameters of your links.
 # In this section you should discriminate the additional transformations that will be part of the calibrations.
 additional_tfs:
