@@ -1,0 +1,108 @@
+<?xml version="1.0" ?>
+<robot name="rihibot" xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!-- ####################################### -->
+    <!-- Arguments and propperties-->
+    <!-- ####################################### -->
+    <!--Args are local, properties are global, so we copy the values of the arguments to the properties-->
+    <!--Properties are global so they can be viewed from inside the included xacros-->
+    <!--  args are used with $(arg arg_name), properties are used as ${property_name}-->
+
+    <xacro:property name="M_PI" value="3.1415926535897931" />
+
+    <!-- Tables properties-->
+    <xacro:property name="table_height" value="0.795"/>
+    <xacro:property name="table_width" value=".9"/>
+    <xacro:property name="table_lenght" value="1.9"/>
+    <xacro:property name="table_tabletop_thickness" value="0.015"/>
+    <xacro:property name="table_leg_radius" value="0.02"/>
+
+    <!-- Manipulator's args and propperties -->
+    <xacro:arg name="joint_limit_params" default="$(find ur_description)/config/ur10e/joint_limits.yaml"/>
+    <xacro:arg name="physical_params" default="$(find ur_description)/config/ur10e/physical_parameters.yaml"/>
+    <xacro:arg name="kinematics_params" default="$(find ur_description)/config/ur10e/default_kinematics.yaml"/>
+    <xacro:arg name="visual_params" default="$(find ur_description)/config/ur10e/visual_parameters.yaml"/>
+<!--    <xacro:arg name="joint_limit_params" default=""/>-->
+<!--    <xacro:arg name="kinematics_params" default=""/>-->
+<!--    <xacro:arg name="physical_params" default=""/>-->
+<!--    <xacro:arg name="visual_params" default=""/>-->
+    <!-- legal values:
+          - hardware_interface/PositionJointInterface
+          - hardware_interface/VelocityJointInterface
+          - hardware_interface/EffortJointInterface
+    -->
+    <xacro:arg name="transmission_hw_interface" default="hardware_interface/PositionJointInterface"/>
+    <xacro:arg name="safety_limits" default="false"/>
+    <xacro:arg name="safety_pos_margin" default="0.15"/>
+    <xacro:arg name="safety_k_position" default="20"/>
+
+
+
+    <!-- ####################################### -->
+    <!-- Include files-->
+    <!-- ####################################### -->
+
+    <!-- Scene objets-->
+    <xacro:include filename="$(find rihibot_description)/urdf/properties.xacro"/>
+    <xacro:include filename="$(find rihibot_description)/urdf/table.macro.xacro"/>
+
+    <!-- Sensors-->
+    <xacro:include filename="$(find rihibot_description)/urdf/rgb_camera.urdf.xacro" />
+    <xacro:include filename="$(find rihibot_description)/urdf/imu.urdf.xacro"/>    
+
+    <!-- Manipulator-->
+    <xacro:include filename="$(find ur_gazebo)/urdf/ur_macro.xacro"/>
+
+    <!-- ####################################### -->
+    <!-- Declare links and joints -->
+    <!-- ####################################### -->
+    <link name="world"/>
+
+    <!-- Place table 1 in the scene-->
+    <xacro:table_macro name="table" parent="world" width="${table_width}"
+                       lenght="${table_lenght}" height="${table_height}"
+                       tabletop_thickness="${table_tabletop_thickness}" leg_radius="${table_leg_radius}">
+        <origin xyz="-1 0 0" rpy="0 0 ${M_PI/2}" />
+    </xacro:table_macro>
+
+    <!--  Place manipulator1 in the scene-->
+    <xacro:ur_robot_gazebo
+            prefix=""
+            joint_limits_parameters_file="$(arg joint_limit_params)"
+            kinematics_parameters_file="$(arg kinematics_params)"
+            physical_parameters_file="$(arg physical_params)"
+            visual_parameters_file="$(arg visual_params)"
+            transmission_hw_interface="$(arg transmission_hw_interface)"
+            safety_limits="$(arg safety_limits)"
+            safety_pos_margin="$(arg safety_pos_margin)"
+            safety_k_position="$(arg safety_k_position)"/>
+
+    <!--  Place robot on top of the table1-->
+    <joint name="tabletop_table_to_ur10e" type="fixed">
+        <parent link="tabletop_table" />
+        <child link = "base_link"/>
+        <origin xyz="0.0 0.25 0.001" rpy="0.0 0.0 0.0" />
+    </joint>
+
+    <!-- Hand Camera (place hand rgb in the end effector) -->
+    <xacro:rgb_camera parent="flange" prefix="rgb_hand" color_gazebo="Green">
+        <origin xyz="-0.02 0.00 0.065" rpy="0 0.0 0" />
+        <color_rgb_rviz>
+            <material name="green">
+                <color rgba="0 0.9 0 1" />
+            </material>
+        </color_rgb_rviz>
+    </xacro:rgb_camera>
+
+    <!-- IMU -->
+    
+    <xacro:imu parent="flange" prefix="imu" color_gazebo="Red">
+        <origin xyz="0.01 0 0" rpy="0 0 0" />
+        <color_rgb_rviz>
+            <material name="red">
+                <color rgba="0.9 0 0 1"/>
+            </material>
+        </color_rgb_rviz>
+    </xacro:imu>
+
+</robot>
