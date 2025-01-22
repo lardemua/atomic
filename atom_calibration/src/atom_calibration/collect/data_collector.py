@@ -622,7 +622,9 @@ class DataCollector:
                 msg = self.label_msgs[sensor_key].point_cloud
             elif sensor['modality'] in ['depth']:
                 msg = self.label_msgs[sensor_key].image
-
+            elif sensor['modality'] in ['imu']:
+                msg = self.label_msgs[sensor_key] # No need to separate the data in the message for IMU
+                
             all_sensor_data_dict[sensor['_name']
                                  ] = message_converter.convert_ros_message_to_dictionary(msg)
 
