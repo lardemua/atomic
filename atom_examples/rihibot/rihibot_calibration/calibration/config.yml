@@ -106,16 +106,6 @@ additional_tfs:
   #  parent_link: "base_footprint"
   #  child_link: "base_link"
 
-
-# I don't actually think this will work or is even needed in this case -- i can just make the changes in the sensors themselves. However, I will keep this here as a reminder to document this and to add it to the template
-
-# additional_data:
-  # imu:
-    # modality: "imu"
-    # link: "imu_link"
-    # parent_link: "flange"
-    # child_link: "imu_link"
-
 # ATOM can also calibrate several parameters of your joints.
 # In this section you should discriminate the joints that will be part of the calibrations.
 # For each joint you must specify which parameters to optimize.
