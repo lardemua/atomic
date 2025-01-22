@@ -13,7 +13,7 @@ import rospkg
 from rospkg.common import ResourceNotFound
 from colorama import Fore, Style
 
-from atom_core.utilities import atomError
+from atom_core.utilities import atomError, atomWarn
 from atom_core.system import resolvePath, expandToLaunchEnv
 
 
@@ -49,7 +49,10 @@ def verifyConfig(config, template_config):
     for sensor_key, sensor in config['sensors'].items():
         same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(sensor, sensor_template)
         if not same_keys:
-            atomError('In config file, sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL + ' does not have the correct keys.\nKeys that should not exist: ' +
+            if missing_keys == ['continuous']:
+                atomWarn('In config file, sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL + ' does not have the "continuous" key. Disbaling continuous data collection.')
+            else:
+                atomError('In config file, sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL + ' does not have the correct keys.\nKeys that should not exist: ' +
                       str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
 
     if config['additional_tfs'] is not None:
@@ -57,7 +60,10 @@ def verifyConfig(config, template_config):
         for additional_tf_key, additional_tf in config['additional_tfs'].items():
             same_keys, extra_keys, missing_keys = dictionaries_have_same_keys(additional_tf, additional_tf_template)
             if not same_keys:
-                atomError('In config file, additional_tf ' + Fore.BLUE + additional_tf_key + Style.RESET_ALL + ' does not have the correct keys.\nKeys that should not exist: ' +
+                if missing_keys == ['continuous']:
+                    atomWarn('In config file, sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL + ' does not have the "continuous" key. Disabling continuous data collection.')
+                else:
+                    atomError('In config file, additional_tf ' + Fore.BLUE + additional_tf_key + Style.RESET_ALL + ' does not have the correct keys.\nKeys that should not exist: ' +
                           str(extra_keys) + '\nKeys that are missing : ' + str(missing_keys))
 
     if config['joints'] is not None:

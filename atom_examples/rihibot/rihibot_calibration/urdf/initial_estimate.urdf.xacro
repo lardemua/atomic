@@ -95,7 +95,6 @@
     </xacro:rgb_camera>
 
     <!-- IMU -->
-    
     <xacro:imu parent="flange" prefix="imu" color_gazebo="Red">
         <origin xyz="0.01 0 0" rpy="0 0 0" />
         <color_rgb_rviz>

@@ -255,7 +255,10 @@ class DataCollector:
                                                        self.callbackDeleteCollection)
 
         # Create the label_msgs dictionary and fill it with the first messages
+        # Also create the msg_buffer dict for continuous data collection
+        # NOTE: IMUs don't make use of labelers, so the label_msg_type and the labels_topic are simply the regular IMU msg type and message topic
         self.label_msgs = {}
+        self.msg_buffer = {}
         for sensor_key, sensor in self.config['sensors'].items():
             if sensor['modality'] == 'rgb':
                 label_msg_type = ImageWithRGBLabels
@@ -263,8 +266,23 @@ class DataCollector:
                 label_msg_type = PointCloudWithLidar3DLabels
             elif sensor['modality'] == 'depth':
                 label_msg_type = DepthImageWithDepthLabels
+            elif sensor['modality'] == "imu":
+                label_msg_type = sensor_msgs.msg.Imu
 
-            labels_topic = sensor_key + '/labels'
+            if sensor['modality'] == "imu":
+                labels_topic = sensor["topic_name"]
+            else:
+                labels_topic = sensor_key + '/labels'
+
+            # Check if the sensor has the 'continuous' key. If it does not, default it to False
+            if 'continuous' not in sensor.keys():
+                sensor['continuous'] = False
+
+            # Create an empty list of data for each sensor with continuous collection for the msg_buffer
+            if sensor['continuous'] == True:
+                self.msg_buffer[sensor_key] = []
+                print('Created message buffer for continuous data collection for sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL + "!")
+
 
             print("Waiting for first message on topic " +
                   labels_topic + ' ... ', end='')
@@ -302,8 +320,13 @@ class DataCollector:
                 label_msg_type = PointCloudWithLidar3DLabels
             elif sensor['modality'] == 'depth':
                 label_msg_type = DepthImageWithDepthLabels
+            elif sensor['modality'] == 'imu':
+                label_msg_type = sensor_msgs.msg.Imu
 
-            labels_topic = sensor_key + '/labels'
+            if sensor["modality"] == "imu":
+                labels_topic = sensor["topic_name"]
+            else:
+                labels_topic = sensor_key + '/labels'
 
             print('Setting up subscriber for ' + Fore.BLUE + sensor_key + Style.RESET_ALL +
                   ' label msgs on topic ' + Fore.GREEN + labels_topic + Style.RESET_ALL)
@@ -325,7 +348,11 @@ class DataCollector:
 
     def callbackReceivedLabelMsg(self, msg, sensor_key):
         # print('Received labels message for sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL)
+        if self.config['sensors'][sensor_key]['continuous'] == True:
+            self.msg_buffer[sensor_key].append(msg)
+        
         self.label_msgs[sensor_key] = msg
+
 
     def callbackReceivedJointStateMsg(self, msg):
         # Add the joint positions to the dictionary
@@ -535,6 +562,9 @@ class DataCollector:
             all_sensor_labels_dict[pattern_key] = {}
             for sensor_key, sensor in self.sensors.items():
 
+                if sensor['modality'] == 'imu':
+                    continue
+
                 print('Collecting data from sensor ' + Fore.BLUE + sensor_key + Style.RESET_ALL +
                       ' for pattern ' + Fore.GREEN + pattern_key + Style.RESET_ALL)
 
@@ -606,6 +636,17 @@ class DataCollector:
                 msg)
 
         # --------------------------------------
+        # Create continuous_sensor_data_dict
+        # --------------------------------------
+        continuous_sensor_data_dict = {}
+        for sensor_key, msg_list in self.msg_buffer.items():
+            continuous_sensor_data_dict[sensor_key] = []
+            for msg in msg_list:
+                msg_dict = message_converter.convert_ros_message_to_dictionary(msg)
+                continuous_sensor_data_dict[sensor_key].append(msg_dict)
+                
+            
+        # --------------------------------------
         # Create collection_dict
         # --------------------------------------
         collection_dict = {'data': all_sensor_data_dict, 'labels': all_sensor_labels_dict,
@@ -621,6 +662,7 @@ class DataCollector:
                    'calibration_config': self.config,
                    'collections': self.collections,
                    'additional_sensor_data': self.additional_data,
+                   'continuous_sensor_data': continuous_sensor_data_dict,
                    'sensors': self.sensors,
                    'transforms': self.transforms,
                    'patterns': self.patterns_dict}

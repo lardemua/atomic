@@ -397,6 +397,10 @@ def estimatePatternPosesForCollection(dataset, collection_key):
 
         for sensor_key, sensor in dataset['sensors'].items():
 
+            # Ignore the sensor if it's an IMU, as no pattern pose estimation can be made
+            if sensor['modality'] == 'imu':
+                continue
+
             # if pattern not detected by sensor in collection
             if not collection['labels'][pattern_key][sensor_key]['detected']:
                 continue
