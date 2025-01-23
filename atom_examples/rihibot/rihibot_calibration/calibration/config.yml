@@ -80,7 +80,7 @@ sensors:
 
 
   # You can have more than one sensor:
-  imu:
+  imu_hand:
     link: "imu_link"
     parent_link: "flange"
     child_link: "imu_link"
