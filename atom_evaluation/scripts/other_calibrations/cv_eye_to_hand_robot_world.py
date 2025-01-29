@@ -26,7 +26,7 @@ from colorama import init as colorama_init
 
 from atom_calibration.calibration.visualization import getCvImageFromCollectionSensor
 from atom_core.atom import getChain, getTransform
-from atom_core.dataset_io import addNoiseToInitialGuess, filterCollectionsFromDataset, loadResultsJSON, saveAtomDataset, addNoiseToJointParameters
+from atom_core.dataset_io import addNoiseToInitialGuess, filterCollectionsFromDataset, loadResultsJSON, saveAtomDataset, addBiasToJointParameters
 from atom_core.geometry import matrixToTranslationRotation, translationRotationToTransform, traslationRodriguesToTransform, translationQuaternionToTransform
 from atom_core.naming import generateKey
 from atom_core.transformations import compareTransforms
@@ -136,7 +136,7 @@ def main():
     # --- Add noise to the joint parameters to be calibrated.
     # ---------------------------------------
     addNoiseToInitialGuess(dataset, args, selected_collection_key)
-    addNoiseToJointParameters(dataset, args)
+    addBiasToJointParameters(dataset, args)
 
     # Apply new joint values to the tfs
     if args['joint_bias_names'] is not None:
