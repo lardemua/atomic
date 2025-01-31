@@ -37,11 +37,11 @@ def cvStereoCalibrate(objp):
         image_points_r = np.ones((n_points, 2), np.float32)
         image_points_l = np.ones((n_points, 2), np.float32)
 
-        for idx, point in enumerate(collection['labels'][right_camera]['idxs']):
+        for idx, point in enumerate(collection['labels'][first_pattern_key][right_camera]['idxs']):
             image_points_r[idx, 0] = point['x']
             image_points_r[idx, 1] = point['y']
 
-        for idx, point in enumerate(collection['labels'][left_camera]['idxs']):
+        for idx, point in enumerate(collection['labels'][first_pattern_key][left_camera]['idxs']):
             image_points_l[idx, 0] = point['x']
             image_points_l[idx, 1] = point['y']
 
@@ -133,8 +133,8 @@ if __name__ == '__main__':
             if sensor_key not in [left_camera, right_camera]:
                 continue
 
-            if sensor['msg_type'] == 'Image' and collection['labels'][sensor_key]['detected']:
-                if not len(collection['labels'][sensor_key]['idxs']) == number_of_corners:
+            if sensor['msg_type'] == 'Image' and collection['labels'][first_pattern_key][sensor_key]['detected']:
+                if not len(collection['labels'][first_pattern_key][sensor_key]['idxs']) == number_of_corners:
                     print(
                         Fore.RED + 'Partial detection removed:' + Style.RESET_ALL + ' label from collection ' +
                         collection_key + ', sensor ' + sensor_key)
@@ -148,8 +148,8 @@ if __name__ == '__main__':
     # remove collections which do not have a pattern detection for both cameras
     collections_to_delete = []
     for collection_key, collection in dataset['collections'].items():
-        if not collection['labels'][args['left_camera']]['detected'] or \
-                not collection['labels'][args['right_camera']]['detected']:
+        if not collection['labels'][first_pattern_key][args['left_camera']]['detected'] or \
+                not collection['labels'][first_pattern_key][args['right_camera']]['detected']:
             print('Collection ' + collection_key + ' pattern not detected on both cameras. Removing...')
             collections_to_delete.append(collection_key)
 
