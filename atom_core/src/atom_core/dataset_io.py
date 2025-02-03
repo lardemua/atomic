@@ -24,8 +24,8 @@ from cv_bridge import CvBridge
 from colorama import Fore, Style
 from rospy_message_converter import message_converter
 from std_msgs.msg import Header
-from atom_core.config_io import uriReader
-from atom_core.naming import generateName, generateKey
+from atom_core.config_io import uriReader, mutually_inclusive_conditions
+from atom_core.naming import generateName, generateKey, generateCollectionKey
 from atom_calibration.collect.label_messages import (
     convertDepthImage32FC1to16UC1, convertDepthImage16UC1to32FC1, numpyFromPointCloudMsg)
 
@@ -787,7 +787,7 @@ def filterAdditionalTfsFromDataset(dataset, args):
     return dataset
 
 
-def addNoiseToJointParameters(dataset, args):
+def addBiasToJointParameters(dataset, args):
     """
     Adds noise
     :param dataset:
@@ -828,6 +828,25 @@ def addNoiseToJointParameters(dataset, args):
             collection['joints'][joint_name][joint_param] = collection['joints'][joint_name][
                 joint_param] + joint_bias
 
+def addNoiseFromNoisyTFLinks(dataset,args,selected_collection_key):
+
+    # Verify both arguments were provided
+    # Unfortunately, mutually inclusive arguments are not built into argparse
+    # https://github.com/python/cpython/issues/55797
+
+    if not mutually_inclusive_conditions(args['noisy_tf_links'], args['noisy_tf_values']):
+        return
+
+
+    # Iterate through pairs of tf's and apply noise
+    translation_tf_noise = args['noisy_tf_values'][0]
+    rotation_tf_noise = args['noisy_tf_values'][1]
+
+    for tf_pair in args['noisy_tf_links']:
+        
+        calibration_parent,calibration_child = tf_pair[0],tf_pair[1]
+        addNoiseToTF(dataset,selected_collection_key,calibration_parent,calibration_child,translation_tf_noise,rotation_tf_noise)
+
 
 def addNoiseToInitialGuess(dataset, args, selected_collection_key):
     """
@@ -836,19 +855,38 @@ def addNoiseToInitialGuess(dataset, args, selected_collection_key):
     :param args: Makes use of nig, i.e., the amount of noise to add to the initial guess atomic transformations to be
                  calibrated
     """
+    # TODO create a issue to discuss if its ok to skip this function call when the noise is 0
+    # if args['noisy_initial_guess'] == [0,0]:
+    #     print("No noise added to transform's initial guess")
+    #     return
+
     if args['sample_seed'] is not None:
         np.random.seed(args['sample_seed'])
 
     nig_trans = args['noisy_initial_guess'][0]
     nig_rot = args['noisy_initial_guess'][1]
 
+
+    # Checking if tf to add noise is also defined in -ntfl, in which case the noise shouldn't be added here
+    # Determining membership in sets is much faster than lists
+    ntfl_tfs = set()
+    if args['noisy_tf_links']:
+        for tf_pair in args['noisy_tf_links']:
+            ntfl_tfs.add(generateKey(tf_pair[0],tf_pair[1]))
+
     # add noise to additional tfs for simulation
     if dataset['calibration_config']['additional_tfs'] is not None:
         for _, additional_tf in dataset['calibration_config']['additional_tfs'].items():
+
             calibration_child = additional_tf['child_link']
             calibration_parent = additional_tf['parent_link']
-            addNoiseToTF(dataset, selected_collection_key, calibration_parent,
-                         calibration_child, nig_trans, nig_rot)
+
+            tf_to_add_noise = generateKey(calibration_parent,calibration_child)
+            if tf_to_add_noise in ntfl_tfs:
+                atomWarn(f'Not adding initial guess noise to {tf_to_add_noise} because its defined in -ntfl')
+                continue
+
+            addNoiseToTF(dataset, selected_collection_key, calibration_parent, calibration_child, nig_trans, nig_rot)
 
     # add noise to sensors tfs for simulation
     for sensor_key, sensor in dataset['sensors'].items():
@@ -858,13 +896,45 @@ def addNoiseToInitialGuess(dataset, args, selected_collection_key):
         if sensor_key != dataset['calibration_config']['anchored_sensor']:
             calibration_child = sensor['calibration_child']
             calibration_parent = sensor['calibration_parent']
-            addNoiseToTF(dataset, selected_collection_key, calibration_parent,
-                         calibration_child, nig_trans, nig_rot)
+
+            tf_to_add_noise = generateKey(calibration_parent,calibration_child)
+            if tf_to_add_noise in ntfl_tfs:
+                atomWarn(f'Not adding initial guess noise to {tf_to_add_noise} because its defined in -ntfl')
+                continue
+
+            addNoiseToTF(dataset, selected_collection_key, calibration_parent, calibration_child, nig_trans, nig_rot)
+
+# TODO make a basic function called by fixed and multiple
+
+def computeNoise(initial_translation,initial_euler_angles,translation_noise_magnitude,rotation_noise_magnitude):
+    '''
+    Computes both the translation and rotation noise given a certain magnitude and returns the new noisy translation/rotation vectors
+    '''
+    # Translation
+
+    v = np.random.uniform(-1.0, 1.0, 3)
+    v = v / np.linalg.norm(v)
+    translation_delta = v * translation_noise_magnitude
+
+    new_translation = initial_translation + translation_delta
+    # Rotation
+
+    # Its necessary to redefine 'v' to ensure that the translation and rotation noise aren't always the same given the same magnitude
+    v = np.random.uniform(-1.0, 1.0, 3)
+    v = v / np.linalg.norm(v)
+    rotation_delta = v * rotation_noise_magnitude
+
+    new_euler_angles = initial_euler_angles + rotation_delta
+
+    return new_translation,new_euler_angles
 
 
-def addNoiseToTF(dataset, selected_collection_key, calibration_parent, calibration_child, nig_trans, nig_rot):
+def addNoiseToTF(dataset, selected_collection_key, calibration_parent, calibration_child, noise_trans, noise_rot):
 
+    print(Fore.RED + 'Transformation parent ' + calibration_parent + ' child ' + calibration_child + Style.RESET_ALL)
     transform_key = generateKey(calibration_parent, calibration_child, suffix='')
+
+    atomWarn(f'Adding noise bigger than 1.0m/rad right now is bugged and might yield unexpected results. Check issue #929 for more information')
 
     # because of #900, and for retrocompatibility with old datasets, we will assume that if the transforms field does
     # not exist in the dataset, then the transformation is fixed
@@ -872,24 +942,17 @@ def addNoiseToTF(dataset, selected_collection_key, calibration_parent, calibrati
 
         # Get original transformation
         quat = dataset['collections'][selected_collection_key]['transforms'][transform_key]['quat']
-        translation = dataset['collections'][selected_collection_key]['transforms'][
-            transform_key]['trans']
+        translation = dataset['collections'][selected_collection_key]['transforms'][transform_key]['trans']
 
-        # Add noise to the 6 pose parameters
-        v = np.random.uniform(-1.0, 1.0, 3)
-        v = v / np.linalg.norm(v)
-        new_translation = translation + v * nig_trans
-
-        v = np.random.choice([-1.0, 1.0], 3) * nig_rot
         euler_angles = tf.transformations.euler_from_quaternion(quat)
-        new_angles = euler_angles + v
+
+
+        new_translation,new_euler_angles = computeNoise(translation,euler_angles,noise_trans,noise_rot)
 
         # Replace the original atomic transformations by the new noisy ones
-        new_quat = tf.transformations.quaternion_from_euler(
-            new_angles[0], new_angles[1], new_angles[2])
+        new_quat = tf.transformations.quaternion_from_euler(new_euler_angles[0], new_euler_angles[1], new_euler_angles[2])
         dataset['collections'][selected_collection_key]['transforms'][transform_key]['quat'] = new_quat
-        dataset['collections'][selected_collection_key]['transforms'][transform_key]['trans'] = list(
-            new_translation)
+        dataset['collections'][selected_collection_key]['transforms'][transform_key]['trans'] = list(new_translation)
 
         # Copy randomized transform to all collections
         for collection_key, collection in dataset['collections'].items():
@@ -902,26 +965,18 @@ def addNoiseToTF(dataset, selected_collection_key, calibration_parent, calibrati
 
         for collection_key, collection in dataset["collections"].items():
 
-            # Get original transformation
             quat = dataset['collections'][collection_key]['transforms'][transform_key]['quat']
-            translation = dataset['collections'][collection_key]['transforms'][transform_key][
-                'trans']
+            translation = dataset['collections'][collection_key]['transforms'][transform_key]['trans']
 
-            # Add noise to the 6 pose parameters
-            v = np.random.uniform(-1.0, 1.0, 3)
-            v = v / np.linalg.norm(v)
-            new_translation = translation + v * nig_trans
-
-            v = np.random.choice([-1.0, 1.0], 3) * nig_rot
             euler_angles = tf.transformations.euler_from_quaternion(quat)
-            new_angles = euler_angles + v
+
+            new_translation,new_euler_angles = computeNoise(translation,euler_angles,noise_trans,noise_rot)
+
+            new_quat = tf.transformations.quaternion_from_euler(new_euler_angles[0], new_euler_angles[1], new_euler_angles[2])
 
             # Replace the original atomic transformations by the new noisy ones
-            new_quat = tf.transformations.quaternion_from_euler(
-                new_angles[0], new_angles[1], new_angles[2])
             dataset['collections'][collection_key]['transforms'][transform_key]['quat'] = new_quat
-            dataset['collections'][collection_key]['transforms'][transform_key]['trans'] = list(
-                new_translation)
+            dataset['collections'][collection_key]['transforms'][transform_key]['trans'] = list(new_translation)
 
 
 def copyTFToDataset(calibration_parent, calibration_child, source_dataset, target_dataset):

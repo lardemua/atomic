@@ -26,7 +26,9 @@ from atom_calibration.calibration.getters_and_setters import (
 from atom_calibration.calibration.objective_function import errorReport, objectiveFunction, replaceTransformsFromJoints
 from atom_calibration.calibration.visualization import setupVisualization, visualizationFunction
 from atom_core.dataset_io import (addNoiseToInitialGuess,
-                                  addNoiseToJointParameters,
+                                  addBiasToJointParameters,
+                                  addNoiseToTF,
+                                  addNoiseFromNoisyTFLinks,
                                   checkIfAtLeastOneLabeledCollectionPerSensor,
                                   filterCollectionsFromDataset,
                                   filterSensorsFromDataset,
@@ -44,6 +46,7 @@ from atom_core.utilities import (atomError, createLambdaExpressionsForArgs,
                                  printComparisonToGroundTruth, saveCommandLineArgsYml)
 from atom_core.xacro_io import saveResultsXacro
 from atom_core.results_yml_io import saveResultsYml
+from atom_core.config_io import parse_list_of_transformations, mutually_inclusive_conditions
 
 
 # -------------------------------------------------------------------------------
@@ -126,6 +129,13 @@ def main():
         type=str, required=False)
     ap.add_argument("-jbv", "--joint_bias_values", nargs='+',
                     help='Operates in tandem with "joint_bias_names"', type=float, required=False)
+    
+    ap.add_argument("-ntfl", "--noisy_tf_links", type=parse_list_of_transformations, help='''Pairs of links defining the transformations to which noise will be added, in the format linkParent1:linkChild2,linkParentA:linkChildB (links defining a transformation separated by
+                    : and different pairs separeted by ,)
+                    Note : This flag overrides the -nig flag''')
+    ap.add_argument("-ntfv", "--noisy_tf_values", nargs=2, type=float, metavar=("translation", "rotation"),
+                    help="Translation(m) and Rotation(rad)(respectively) noise values to add to the transformations specified by-ntfl")
+
     ap.add_argument(
         "-ssf", "--sensor_selection_function", default=None, type=str,
         help="A string to be evaluated into a lambda function that receives a sensor name as input and "
@@ -205,6 +215,9 @@ def main():
     args['dataset_folder'] = os.path.dirname(args['json_file'])
     output_folder = os.path.dirname(args['json_file'])
 
+    # -sce wasn't working because args previously had this key
+    args['output_folder'] = output_folder
+
     # ---------------------------------------
     # --- Read data from file
     # ---------------------------------------
@@ -261,8 +274,10 @@ def main():
 
     addNoiseToInitialGuess(dataset, args, selected_collection_key)
 
+    addNoiseFromNoisyTFLinks(dataset,args,selected_collection_key)
+
     # Must add noise, transfer new joints to transforms, and only after remove unselected joints
-    addNoiseToJointParameters(dataset, args)
+    addBiasToJointParameters(dataset, args)
     replaceTransformsFromJoints(dataset)
     dataset = filterJointsFromDataset(dataset, args)
     dataset = filterJointParametersFromDataset(dataset, args)
