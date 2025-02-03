@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!--
+
+          █████╗ ████████╗ ██████╗ ███╗   ███╗
+         ██╔══██╗╚══██╔══╝██╔═══██╗████╗ ████║
+         ███████║   ██║   ██║   ██║██╔████╔██║
+         ██╔══██║   ██║   ██║   ██║██║╚██╔╝██║
+  __     ██║  ██║   ██║   ╚██████╔╝██║ ╚═╝ ██║    _
+ / _|    ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝   | |
+ | |_ _ __ __ _ _ __ ___   _____      _____  _ __| | __
+ |  _| '__/ _` | '_ ` _ \ / _ \ \ /\ / / _ \| '__| |/ /
+ | | | | | (_| | | | | | |  __/\ V  V / (_) | |  |   <
+ |_| |_|  \__,_|_| |_| |_|\___| \_/\_/ \___/|_|  |_|\_\
+ https://github.com/lardemua/atom
+-->
+
+<!-- WARNING WARNING WARNING WARNING auto-generated file!! -->
+<!-- Only modify this file if you know what you are doing! -->
+
+<!--
+@file calibrate.launch Runs an optimization to calibrate the robot's sensors.
+-->
+
+<launch>
+
+    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+    <!-- Parameters-->
+    <arg name="rviz_file" default="$(find rihibot_calibration)/rviz/calibrate.rviz"/>
+    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+
+    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+    <!-- Reading from the dataset, i.e., no rosbag play to publish clock. Cannot use sim time. -->
+    <param name="/use_sim_time" value="false"/>
+    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+
+    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+    <!-- Visualization -->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rviz_file)" required="true"/>
+    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+
+</launch>

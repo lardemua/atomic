@@ -1,0 +1,95 @@
+<?xml version="1.0"?>
+<robot name="imu" xmlns:xacro="http://ros.org/wiki/xacro">
+
+	<!-- This is a xacro macro to define an IMU.
+	You can define as arguments the parent coordinate frame, the name of the sensor, the transformation
+	from that parent frame to the camera's root frame, the color to be used in rviz, and the color
+	used in gazebo. Colors should be specified for both rviz and gazebo since these have independent colors.
+	Gazebo colors should be capitalized and from this list:
+		http://wiki.ros.org/simulator_gazebo/Tutorials/ListOfMaterials
+	-->
+
+	<!-- Start of macro -->
+	<xacro:macro name="imu" params="parent prefix *origin **color_rviz color_gazebo">
+
+		<joint name="${prefix}_joint" type="fixed">
+			<xacro:insert_block name="origin"/>
+			<parent link="${parent}" />
+			<child link="${prefix}_link" />
+		</joint>
+
+		<link name="${prefix}_link">
+			<visual>
+				<origin xyz="0 0 0" rpy="0 0 0"/>
+				<geometry>
+					<box size="0.02 0.02 0.02"/>
+				</geometry>
+			</visual>
+
+			<collision>
+				<origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+				<geometry>
+					<box size="0.02 0.02 0.02"/>
+				</geometry>
+			</collision>
+			
+			<inertial>
+				<xacro:insert_block name="origin"/>
+				<mass value="0.0000000000000000000000000000001"/>
+				<inertia ixx="0.0" ixy="0.0" ixz="0.0"
+						 iyy="0.0" iyz="0.0"
+						 izz="0.0"/>
+			</inertial>
+		</link>
+
+		<gazebo reference="${prefix}_link">
+			<!-- <plugin name="imu_plugin" filename="libgazebo_ros_imu.so"> -->
+				<!-- <alwaysOn>true</alwaysOn> -->
+				<!-- <bodyName>imu_link</bodyName> -->
+				<!-- <frameName>imu_link</frameName> -->
+				<!-- <topicName>imu</topicName> -->
+				<!-- <serviceName>imu_service</serviceName> -->
+				<!-- <gaussianNoise>0.0</gaussianNoise> -->
+				<!-- <updateRate>200</updateRate> -->
+				<!-- <imu> -->
+					<!-- <noise> -->
+					<!-- <type>gaussian</type> -->
+					<!-- <rate> -->
+						<!-- <mean>0.0</mean> -->
+						<!-- <stddev>2e-4</stddev> -->
+						<!-- <bias_mean>0.0000075</bias_mean> -->
+						<!-- <bias_stddev>0.0000008</bias_stddev> -->
+					<!-- </rate> -->
+					<!-- <accel> -->
+						<!-- <mean>0.0</mean> -->
+						<!-- <stddev>1.7e-2</stddev> -->
+						<!-- <bias_mean>0.1</bias_mean> -->
+						<!-- <bias_stddev>0.001</bias_stddev> -->
+					<!-- </accel> -->
+					<!-- </noise> -->
+				<!-- </imu> -->
+			<!-- </plugin> -->
+
+			<gravity>true</gravity>
+			<sensor name="imu_sensor" type="imu">
+				<always_on>true</always_on>
+				<update_rate>100</update_rate>
+				<visualize>true</visualize>
+				<topic>__default_topic__</topic>
+					<plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
+					<topicName>imu</topicName>
+					<bodyName>imu_link</bodyName>
+					<updateRateHZ>200.0</updateRateHZ>
+					<gaussianNoise>0.0</gaussianNoise>
+					<xyzOffset>0 0 0</xyzOffset>
+					<rpyOffset>0 0 0</rpyOffset>
+					<frameName>imu_link</frameName>
+					<initialOrientationAsReference>false</initialOrientationAsReference>
+				</plugin>
+				<pose>0 0 0 0 0 0</pose>
+			</sensor>
+
+		</gazebo>
+
+</xacro:macro>
+</robot>

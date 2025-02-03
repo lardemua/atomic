@@ -1,0 +1,414 @@
+{
+  "directed": true,
+  "graph": {},
+  "links": [
+    {
+      "child": "table",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "world_to_table",
+      "joint_params_calibrated": null,
+      "parent": "world",
+      "source": "world",
+      "target": "table",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "pattern_link",
+      "from_bag": false,
+      "is_transformation_calibrated": true,
+      "joint_name": null,
+      "joint_params_calibrated": null,
+      "parent": "world",
+      "source": "world",
+      "target": "pattern_link",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "tabletop_table",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "table_to_tabletop_table",
+      "joint_params_calibrated": null,
+      "parent": "table",
+      "source": "table",
+      "target": "tabletop_table",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "leg1_table",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "table_to_leg1",
+      "joint_params_calibrated": null,
+      "parent": "table",
+      "source": "table",
+      "target": "leg1_table",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "leg2_table",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "table_to_leg2",
+      "joint_params_calibrated": null,
+      "parent": "table",
+      "source": "table",
+      "target": "leg2_table",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "leg3_table",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "table_to_leg3",
+      "joint_params_calibrated": null,
+      "parent": "table",
+      "source": "table",
+      "target": "leg3_table",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "leg4_table",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "table_to_leg4",
+      "joint_params_calibrated": null,
+      "parent": "table",
+      "source": "table",
+      "target": "leg4_table",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "base_link",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "tabletop_table_to_ur10e",
+      "joint_params_calibrated": null,
+      "parent": "tabletop_table",
+      "source": "tabletop_table",
+      "target": "base_link",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "base_link_inertia",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "base_link-base_link_inertia",
+      "joint_params_calibrated": null,
+      "parent": "base_link",
+      "source": "base_link",
+      "target": "base_link_inertia",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "base",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "base_link-base_fixed_joint",
+      "joint_params_calibrated": null,
+      "parent": "base_link",
+      "source": "base_link",
+      "target": "base",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "shoulder_link",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "shoulder_pan_joint",
+      "joint_params_calibrated": null,
+      "parent": "base_link_inertia",
+      "source": "base_link_inertia",
+      "target": "shoulder_link",
+      "type": "revolute",
+      "weight": 1
+    },
+    {
+      "child": "upper_arm_link",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "shoulder_lift_joint",
+      "joint_params_calibrated": null,
+      "parent": "shoulder_link",
+      "source": "shoulder_link",
+      "target": "upper_arm_link",
+      "type": "revolute",
+      "weight": 1
+    },
+    {
+      "child": "forearm_link",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "elbow_joint",
+      "joint_params_calibrated": null,
+      "parent": "upper_arm_link",
+      "source": "upper_arm_link",
+      "target": "forearm_link",
+      "type": "revolute",
+      "weight": 1
+    },
+    {
+      "child": "wrist_1_link",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "wrist_1_joint",
+      "joint_params_calibrated": null,
+      "parent": "forearm_link",
+      "source": "forearm_link",
+      "target": "wrist_1_link",
+      "type": "revolute",
+      "weight": 1
+    },
+    {
+      "child": "wrist_2_link",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "wrist_2_joint",
+      "joint_params_calibrated": null,
+      "parent": "wrist_1_link",
+      "source": "wrist_1_link",
+      "target": "wrist_2_link",
+      "type": "revolute",
+      "weight": 1
+    },
+    {
+      "child": "wrist_3_link",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "wrist_3_joint",
+      "joint_params_calibrated": null,
+      "parent": "wrist_2_link",
+      "source": "wrist_2_link",
+      "target": "wrist_3_link",
+      "type": "revolute",
+      "weight": 1
+    },
+    {
+      "child": "flange",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "wrist_3-flange",
+      "joint_params_calibrated": null,
+      "parent": "wrist_3_link",
+      "source": "wrist_3_link",
+      "target": "flange",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "tool0",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "flange-tool0",
+      "joint_params_calibrated": null,
+      "parent": "flange",
+      "source": "flange",
+      "target": "tool0",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "rgb_hand_link",
+      "from_bag": false,
+      "is_transformation_calibrated": true,
+      "joint_name": "rgb_hand_joint",
+      "joint_params_calibrated": null,
+      "parent": "flange",
+      "source": "flange",
+      "target": "rgb_hand_link",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "imu_link",
+      "from_bag": false,
+      "is_transformation_calibrated": true,
+      "joint_name": "imu_joint",
+      "joint_params_calibrated": null,
+      "parent": "flange",
+      "source": "flange",
+      "target": "imu_link",
+      "type": "fixed",
+      "weight": 1
+    },
+    {
+      "child": "rgb_hand_optical_frame",
+      "from_bag": false,
+      "is_transformation_calibrated": false,
+      "joint_name": "rgb_hand_optical_joint",
+      "joint_params_calibrated": null,
+      "parent": "rgb_hand_link",
+      "source": "rgb_hand_link",
+      "target": "rgb_hand_optical_frame",
+      "type": "fixed",
+      "weight": 1
+    }
+  ],
+  "multigraph": false,
+  "nodes": [
+    {
+      "from_bag": false,
+      "id": "world",
+      "is_world": true,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "table",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "tabletop_table",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "leg1_table",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "leg2_table",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "leg3_table",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "leg4_table",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "base_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "base_link_inertia",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "shoulder_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "upper_arm_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "forearm_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "wrist_1_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "wrist_2_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "wrist_3_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "base",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "flange",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "tool0",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "rgb_hand_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": null
+    },
+    {
+      "from_bag": false,
+      "id": "rgb_hand_optical_frame",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": "rgb_hand"
+    },
+    {
+      "from_bag": false,
+      "id": "imu_link",
+      "is_world": false,
+      "pattern": null,
+      "sensor_data": "imu"
+    },
+    {
+      "id": "pattern_link",
+      "is_world": false,
+      "pattern": "pattern_1",
+      "sensor_data": null
+    }
+  ]
+}

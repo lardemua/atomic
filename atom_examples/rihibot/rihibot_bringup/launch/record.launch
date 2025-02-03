@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<launch>
+
+    <!-- EDIT:
+    create a folder in HOME: 'bagfiles' bag will be recorded here
+    add to .bashrc: 'export ROS_BAGS="$HOME/bagfiles"' -->
+
+    <!--arguments-->
+    <arg name="bag" default="$(env ROS_BAGS)/data.bag"/>
+
+    <arg name="simulation" default="true"/>
+    <param name="/use_sim_time" value="$(arg simulation)"/>
+
+    <!-- List topics to record -->
+    <node name="rosbag_record" pkg="rosbag" type="record" output="screen" args="
+        /tf
+        /tf_static
+        /joint_states
+
+        /rgb_hand/image_raw/compressed
+        /rgb_hand/camera_info
+
+        /imu
+
+        -o $(arg bag)">
+    </node>
+
+</launch>
