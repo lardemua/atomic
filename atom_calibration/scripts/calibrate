@@ -480,10 +480,6 @@ def main():
         for sensor_key, sensor in dataset["sensors"].items():
             if sensor["modality"] == "rgb":  # if sensor is a camera add intrinsics
 
-                fx = sensor['camera_info']['K'][0]
-                fy = sensor['camera_info']['K'][4]
-                cx = sensor['camera_info']['K'][2]
-                cy = sensor['camera_info']['K'][5]
                 ground_truth_values = getterCameraIntrinsics(dataset_ground_truth, sensor_key)
                 opt.pushParamVector(
                     group_name=str(sensor_key) + "_intrinsics", data_key="dataset",
