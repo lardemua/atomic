@@ -77,58 +77,6 @@ def generate_skew_symmetric_matrix_from_vector(vector):
 
     return skew_symmetric_matrix
 
-def generate_skew_symmetric_4x4_matrix_from_vector(vector):
-
-    skew_symmetric_matrix = np.zeros((4,4))
-    
-    skew_symmetric_matrix[0,1] = -vector[0]
-    skew_symmetric_matrix[0,2] = -vector[1]
-    skew_symmetric_matrix[0,3] = -vector[2]
-
-    skew_symmetric_matrix[1,0] = vector[0]
-    skew_symmetric_matrix[1,2] = vector[2]
-    skew_symmetric_matrix[1,3] = -vector[1]
-
-    skew_symmetric_matrix[2,0] = vector[1]
-    skew_symmetric_matrix[2,1] = -vector[2]
-    skew_symmetric_matrix[2,3] = vector[0]
-    
-    skew_symmetric_matrix[3,0] = vector[2]
-    skew_symmetric_matrix[3,1] = vector[1]
-    skew_symmetric_matrix[3,2] = -vector[0]
-
-    return skew_symmetric_matrix
-
-def rk4_imu_integration(imu_data_0, imu_data_1, initial_orientation):
-    # This function receives two imu "data points" and integrates the angular velocity and linear acceleration to calculate the angular and linear displacements between these two points.
-
-    # Get delta_t
-    t_0 = imu_data_0["header"]["stamp"]["secs"] + (10**(-9)) * imu_data_0["header"]["stamp"]["nsecs"]
-    t_1 = imu_data_1["header"]["stamp"]["secs"] + (10**(-9)) * imu_data_1["header"]["stamp"]["nsecs"]
-    delta_t = t_1 - t_0
-
-
-    # Orientation integration
-    omega_0 = imu_data_0["angular_velocity"]
-    omega_1 = imu_data_1["angular_velocity"]
-
-    q1 = initial_orientation
-    omega_m_0 = generate_skew_symmetric_4x4_matrix_from_vector(omega_0)
-    k1 = (1/2) * (omega_m_0 @ q1)
-
-    q2 = initial_orientation + delta_t*(1/2)*k1
-    omega_m_halfway = generate_skew_symmetric_4x4_matrix_from_vector((omega_0 + omega_1)/2)
-    k2 = (1/2) * (omega_m_halfway @ q2)
-
-    q3 = initial_orientation + delta_t*(1/2)*k2
-    k3 = (1/2) * (omega_m_halfway @ q3)
-
-    q4 = initial_orientation + delta_t*k3
-    omega_m_1 = generate_skew_symmetric_4x4_matrix_from_vector(omega_1)
-    k4 = (1/2) * (omega_m_1 @ q4)
-
-    pass
-
 def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, selected_collection_key, K, D):
     
     # Calculate camera-to-pattern tf (c_T_p/H_cw in the paper) and imu_T_w for each collection
@@ -139,7 +87,7 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
 
         # Pattern not detected by sensor in collection
         if not collection['labels'][args['pattern']][args['camera']]['detected']:
-            continue        
+            continue
 
         # Build a numpy array with the charuco corners
         corners = np.zeros(
@@ -160,7 +108,7 @@ def estimate_cam_to_imu(dataset, args, pattern, imu_link_name, world_link_name, 
         # Convert to 4x4 transform and add to list
         c_T_p = traslationRodriguesToTransform(tvec, rvec)
         c_T_p_lst.append((collection_key, c_T_p))
-        
+    
         # Get tf through FK. We can do this because the tfs in the dataset (in simulation) are GT.
         # TODO: Ultimately, this is not what we want to do. We are supposed to integrate IMU data to get the necessary TFs. This FK method is an intermediate step. Create an option for this to be enable for when IMU data integration is implemented.
         imu_T_w = getTransform(
