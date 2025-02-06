@@ -139,16 +139,18 @@ def addAveragesBottomRowToTable(table, header):
 
 
 def printComparisonToGroundTruth(
-        dataset, dataset_initial, dataset_ground_truth, selected_collection_key, output_folder, args):
+    dataset, dataset_initial, dataset_ground_truth, selected_collection_key, output_folder,
+        args):
+
+    header = ['Transform', 'Description', 'Et0 [m]', 'Et [m]', 'Rrot0 [rad]', 'Erot [rad]']
+    table = PrettyTable(header)
 
     # --------------------------------------------------
     # Evaluate sensor poses
     # --------------------------------------------------
     for sensor_key, sensor in dataset["sensors"].items():
-        header = ['Transform', 'Description', 'Et0 [m]', 'Et [m]', 'Rrot0 [rad]', 'Erot [rad]']
-        table = PrettyTable(header)
 
-        # Create a table_to_save to be output as a csv file (#977) 
+        # Create a table_to_save to be output as a csv file (#977)
         if args["save_file_results"]:
             header_table_to_save = ['Transform', 'Et [m]', 'Erot [rad]']
             table_to_save = PrettyTable(header_table_to_save)
@@ -175,9 +177,10 @@ def printComparisonToGroundTruth(
         table.add_row(row)
 
         if args["save_file_results"]:
-            row_table_to_save = [transform_key, round(translation_error_2,6), round(rotation_error_2, 6)]
+            row_table_to_save = [
+                transform_key, round(translation_error_2, 6),
+                round(rotation_error_2, 6)]
             table_to_save.add_row(row_table_to_save)
-
 
     # TODO Evaluate intrinsics
 
@@ -187,10 +190,9 @@ def printComparisonToGroundTruth(
     if dataset['calibration_config']['additional_tfs'] is not None:
         for additional_tf_key, additional_tf in dataset['calibration_config']['additional_tfs'].items():
 
-            transform_key = generateKey(additional_tf["parent_link"], sensor["child_link"])
+            # TODO #1002 @Kazadhum this seems to be wrong. Should we not use additional_tf['child_link]? And this is quite a but.
+            transform_key = generateKey(additional_tf["parent_link"], additional_tf["child_link"])
             row = [transform_key, Fore.LIGHTCYAN_EX + additional_tf_key + Style.RESET_ALL]
-
-
 
             transform_calibrated = dataset['collections'][selected_collection_key]['transforms'][
                 transform_key]
@@ -209,18 +211,17 @@ def printComparisonToGroundTruth(
             row.append(getNumberQualifier(rotation_error_1, unit='rad'))
             row.append(getNumberQualifier(rotation_error_2, unit='rad'))
             table.add_row(row)
-        
+
         if args["save_file_results"]:
-            row_table_to_save = [transform_key, round(translation_error_2,6), round(rotation_error_2, 6)]
+            row_table_to_save = [
+                transform_key, round(translation_error_2, 6),
+                round(rotation_error_2, 6)]
             table_to_save.add_row(row_table_to_save)
-    
+
     # --------------------------------------------------
     # Evaluate pattern transforms
     # --------------------------------------------------
     for pattern_key, pattern in dataset['calibration_config']['calibration_patterns'].items():
-
-        print('pattern ' + pattern_key)
-        print(pattern)
 
         transform_key = generateKey(pattern["parent_link"], pattern["link"])
         row = [transform_key, Fore.LIGHTCYAN_EX + pattern_key + Style.RESET_ALL]
@@ -250,7 +251,9 @@ def printComparisonToGroundTruth(
         table.add_row(row)
 
         if args["save_file_results"]:
-            row_table_to_save = [transform_key, round(translation_error_2,6), round(rotation_error_2, 6)]
+            row_table_to_save = [
+                transform_key, round(translation_error_2, 6),
+                round(rotation_error_2, 6)]
             table_to_save.add_row(row_table_to_save)
 
     # Add bottom row with averages
@@ -258,7 +261,7 @@ def printComparisonToGroundTruth(
 
     print(Style.BRIGHT + '\nTransforms Calibration' + Style.RESET_ALL)
     print(
-        'Et: average translation error (Et0 - initial) [m],  Erot: average rotation error (Erot0 - initial) [rad]')
+        'Et: average translation error (Et0=initial) [m],  Erot: average rotation error (Erot0=initial) [rad]')
     print('Translation errors: ' + Fore.LIGHTGREEN_EX + '< 1 mm' + Fore.BLACK + ' | ' + Fore.GREEN +
           '< 1 cm' + Fore.BLACK + ' | ' + Fore.YELLOW + '< 5 cm' + Fore.BLACK + ' | ' + Fore.RED +
           '>= 5 cm' + Style.RESET_ALL)
@@ -289,7 +292,7 @@ def printComparisonToGroundTruth(
 
     if dataset['calibration_config']['joints'] is not None:
         header = ['Joint', 'Param', 'Error (ini)', 'Error (calib)']
-        table = PrettyTable(header) 
+        table = PrettyTable(header)
 
         for joint_key, joint in dataset['calibration_config']['joints'].items():
             for param in joint['params_to_calibrate']:
@@ -331,7 +334,6 @@ def printComparisonToGroundTruth(
         with open(filename, 'w', newline='') as file:
             file.write(removeColorsFromText(table.get_csv_string()))
 
-    
 
 def raise_timeout_error(signum, frame):
     raise subprocess.TimeoutExpired(None, 1)

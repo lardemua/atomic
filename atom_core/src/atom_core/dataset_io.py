@@ -574,9 +574,7 @@ def filterSensorsFromDataset(dataset, args):
             print("Deleted sensors: " + str(deleted))
 
     if not dataset['sensors'].keys():
-        raise ValueError(
-            'No sensors were selected. Cannot optimize without sensors. Please revise your '
-            'dataset and your sensor selection function.')
+        atomWarn('No sensors were selected. Are you sure this calibration problem has no sensors?')
 
     return dataset
 
@@ -705,7 +703,7 @@ def filterPatternsFromDataset(dataset, args):
             print("Deleted patterns for calibration: " + str(deleted))
 
         if not dataset['calibration_config']['calibration_patterns']:
-            atomError('There are no patterns in the dataset. Cannot continue.')
+            atomWarn('There are no patterns in the dataset. Make sure your calibration is well configured.')
 
     return dataset
 
@@ -751,7 +749,8 @@ def filterJointsFromDataset(dataset, args):
             deleted = []
             if dataset['calibration_config']['joints'] is not None:
                 for joint_key in dataset['calibration_config']['joints']:
-                    if not args['joint_selection_function'](joint_key):  # use the lambda expression jsf
+                    # use the lambda expression jsf
+                    if not args['joint_selection_function'](joint_key):
                         deleted.append(joint_key)
 
             for joint_key in deleted:

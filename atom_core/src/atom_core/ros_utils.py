@@ -11,6 +11,7 @@ tmp_image = Image()
 tmp_pointcloud = PointCloud2()
 tmp_laserscan = LaserScan()
 
+
 def filterLaunchArguments(argvs):
     # Roslaunch files send a "__name:=..." argument (and __log:=) which disrupts the argparser. The solution is to
     # filter this argv. in addition, the first argument is the node name, which should also not be given to the
@@ -72,7 +73,12 @@ def getMaxTime(stamps):
 
 
 def getAverageTime(stamps):
+
     reference_time = rospy.Time.now()  # get a time at the start of this call
+
+    if len(stamps) < 1:  # need at least two time stamps to compute a delta
+        return reference_time
+
     durations = [(stamp - reference_time).to_sec() for stamp in stamps]
     avg_duration = sum(durations) / len(durations)
     avg_time = reference_time + rospy.Duration(avg_duration)

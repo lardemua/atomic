@@ -6,6 +6,7 @@ Casts an optimization problem using an ATOM dataset file as input. Then calibrat
 # Standard imports
 import argparse
 import copy
+import itertools
 import os
 import random
 import signal
@@ -408,6 +409,27 @@ def main():
                     bound_max = [x + 2 * sys.float_info.epsilon for x in initial_transform]
                     bound_min = [x - 2 * sys.float_info.epsilon for x in initial_transform]
                 else:
+
+                    # # TODO hardcoded test to see if not optimizing rotation will help
+                    # if transform_key == 'gp1_m_adapter_base_link-gp1_m_torch_base_link':
+                    #     bound_max_no_tol = [
+                    #         x + 2 * sys.float_info.epsilon for x in initial_transform]
+                    #     bound_min_no_tol = [
+                    #         x - 2 * sys.float_info.epsilon for x in initial_transform]
+
+                    #     bound_max_all = [+np.inf for x in initial_transform]
+                    #     bound_min_all = [-np.inf for x in initial_transform]
+
+                    #     bound_max = bound_max_all[0:3]
+                    #     bound_max.extend(bound_max_no_tol[3:6])
+
+                    #     bound_min = bound_min_all[0:3]
+                    #     bound_min.extend(bound_min_no_tol[3:6])
+
+                    # else:
+                    #     bound_max = [+np.inf for x in initial_transform]
+                    #     bound_min = [-np.inf for x in initial_transform]
+
                     bound_max = [+np.inf for x in initial_transform]
                     bound_min = [-np.inf for x in initial_transform]
 
@@ -614,7 +636,8 @@ def main():
                                     setter=setter, ground_truth_value=ground_truth_value)
 
         # TODO add joint limits from xacro
-    # opt.printParameters()
+
+    opt.printParameters()
 
     # ---------------------------------------
     # --- Define THE OBJECTIVE FUNCTION
@@ -770,6 +793,41 @@ def main():
                 # print(opt.residuals.keys())
                 # print('Adding residuals for sensor ' + sensor_key + ' with msg_type ' + sensor['msg_type'] +
                 #       ' affected by parameters:\n' + str(params))
+
+    # For contacts, we will have one translation displacement per collection per contact, i.e., x,y,z
+    if 'contacts' in dataset['calibration_config'].keys():
+
+        # This is the version with absolute xyz of touched point
+        # for collection_key, collection in dataset["collections"].items():
+        #     for contact_key, contact in dataset['calibration_config']['contacts'].items():
+
+        #         if contact['type'] == 'frame_alignment':
+        #             # TODO should define params that affect the residuals
+        #             # For now will use all parameters
+        #             params = opt.getParameters()
+
+        #             rname = "c" + collection_key + "_ct_" + contact_key + '_translation'
+        #             opt.pushResidual(name=rname, params=params)
+
+        #             # Including rotation residuals
+        #             # rname = "c" + collection_key + "_ct_" + contact_key + '_rotation'
+        #             # opt.pushResidual(name=rname, params=params)
+
+        # This is the version without the absolute xyz
+        for contact_key, contact in dataset['calibration_config']['contacts'].items():
+            # TODO change contact type
+            if contact['type'] == 'frame_alignment':
+                # TODO should define params that affect the residuals
+                # For now will use all parameters
+                params = opt.getParameters()
+
+                for collection_a, collection_b in list(itertools.combinations(
+                        dataset['collections'].keys(), 2)):
+                    # print('collection_a: ' + str(collection_a) + ' collection_b: ' + str(collection_b))
+
+                    rname = "c" + str(collection_a) + "_c_" + str(collection_b) + \
+                        '_' + contact_key + '_translation'
+                    opt.pushResidual(name=rname, params=params)
 
     # opt.printResiduals()
 

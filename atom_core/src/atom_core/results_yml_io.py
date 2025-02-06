@@ -33,7 +33,8 @@ def saveResultsYml(dataset, selected_collection_key, output_file):
 
         # Search for corresponding transform. Since this is a sensor transformation it must be static, which is why we use only one collection, the selected collection key
         found = False
-        for transform_key, transform in dataset['collections'][selected_collection_key]['transforms'].items():
+        for transform_key, transform in dataset['collections'][selected_collection_key][
+                'transforms'].items():
 
             if sensor['parent_link'] == transform['parent'] and sensor['child_link'] == transform['child']:
                 trans = transform['trans']
@@ -65,20 +66,22 @@ def saveResultsYml(dataset, selected_collection_key, output_file):
 
             # Search for corresponding transform. Since this is a sensor transformation it must be static, which is why we use only one collection, the selected collection key
             found = False
-            for transform_key, transform in dataset['collections'][selected_collection_key]['transforms'].items():
+            for transform_key, transform in dataset['collections'][selected_collection_key][
+                    'transforms'].items():
 
                 if additional_tf['parent_link'] == transform['parent'] and additional_tf['child_link'] == transform['child']:
                     trans = transform['trans']
                     quat = transform['quat']
                     rpy = tf.transformations.euler_from_quaternion(quat, axes='rxyz')
 
-                    d[sensor_key + '_x'] = float(trans[0])
-                    d[sensor_key + '_y'] = float(trans[1])
-                    d[sensor_key + '_z'] = float(trans[2])
+                    # TODO #1003 this is wrong again
+                    d[additional_tf_key + '_x'] = float(trans[0])
+                    d[additional_tf_key + '_y'] = float(trans[1])
+                    d[additional_tf_key + '_z'] = float(trans[2])
 
-                    d[sensor_key + '_roll'] = float(rpy[0])
-                    d[sensor_key + '_pitch'] = float(rpy[1])
-                    d[sensor_key + '_yaw'] = float(rpy[2])
+                    d[additional_tf_key + '_roll'] = float(rpy[0])
+                    d[additional_tf_key + '_pitch'] = float(rpy[1])
+                    d[additional_tf_key + '_yaw'] = float(rpy[2])
                     found = True
                     break
 
@@ -102,7 +105,8 @@ def saveResultsYml(dataset, selected_collection_key, output_file):
 
                     d[joint_key] = {}
                     for param_to_calibrate in config_joint['params_to_calibrate']:
-                        calibrated_value = dataset['collections'][selected_collection_key]['joints'][joint_key][param_to_calibrate]
+                        calibrated_value = dataset['collections'][selected_collection_key][
+                            'joints'][joint_key][param_to_calibrate]
                         d[joint_key][param_to_calibrate] = float(calibrated_value)
 
                     found = True

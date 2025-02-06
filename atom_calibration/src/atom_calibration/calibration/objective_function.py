@@ -7,9 +7,11 @@ Definition of the objective function.
 # -------------------------------------------------------------------------------
 
 # Standard imports
+import itertools
 import math
 import copy
 from datetime import datetime
+from prettytable import PrettyTable
 
 import re
 import numpy as np
@@ -17,6 +19,7 @@ from atom_core.joint_models import getTransformationFromJoint, replaceTransforms
 import atom_core.ros_numpy
 from colorama import Fore, Style
 from scipy.spatial import distance
+from scipy.spatial.transform import Rotation as R
 
 # ROS imports
 from geometry_msgs.msg import Point
@@ -37,10 +40,23 @@ from atom_calibration.collect.label_messages import pixToWorld, worldToPix
 # -------------------------------------------------------------------------------
 # --- FUNCTIONS
 # -------------------------------------------------------------------------------
-def errorReport(dataset, residuals, normalizer, args):
-    from prettytable import PrettyTable
-    table_header = ['Collection']
 
+
+def rotation_magnitude(T1, T2):
+
+    R1 = T1[0:3, 0:3]  # get only rotation component
+    R2 = T2[0:3, 0:3]  # get only rotation component
+
+    R_rel = R.from_matrix(R1.T @ R2)  # Compute relative rotation
+    return R_rel.magnitude()  # Get the rotation magnitude (angle in radians)
+
+
+def errorReport(dataset, residuals, normalizer, args):
+
+    table_header = ['Collection']
+    return
+
+    # Sensor-pattern based errors
     for sensor_key, sensor in dataset['sensors'].items():
 
         # Define units
@@ -55,6 +71,12 @@ def errorReport(dataset, residuals, normalizer, args):
             table_header.append(Fore.YELLOW + sensor_key + Style.RESET_ALL + units)
         else:
             table_header.append(sensor_key + units)
+
+    # Contact based errors
+    if 'contacts' in dataset['calibration_config'].keys():
+        for contact_key, contact in dataset['calibration_config']['contacts'].items():
+            table_header.append(contact_key + ' (trans)')
+            # table_header.append(contact_key + ' (rot)')
 
     table = PrettyTable(table_header)
     # table to save. This table was created, because the original has colors and the output csv save them as random characters
@@ -82,8 +104,27 @@ def errorReport(dataset, residuals, normalizer, args):
                 row.append(Fore.LIGHTBLACK_EX + '---' + Style.RESET_ALL)
                 row_save.append('---')
 
+        if 'contacts' in dataset['calibration_config'].keys():
+
+            # This is the version with absolute xyz of touched point
+            # for contact_key, contact in dataset['calibration_config']['contacts'].items():
+            #     # Translation error
+            #     rname = "c" + collection_key + "_ct_" + contact_key + '_translation'
+            #     value = f'{residuals[rname]:.4f}'
+            #     row.append(value)
+            #     row_save.append(value)
+
+            #     # Rotation error
+            #     # rname = "c" + collection_key + "_ct_" + contact_key + '_rotation'
+            #     # value = f'{residuals[rname]:.4f}'
+            #     # row.append(value)
+            #     # row_save.append(value)
+            pass
+
         table.add_row(row)
         table_to_save.add_row(row)
+
+    # TODO new table for pairwise contacts?
 
     if args['show_normalized_values']:
         # Regular expression pattern to match floats
@@ -400,6 +441,10 @@ def objectiveFunction(data):
 
     # print('Computing cost ...')
     r = {}  # Initialize residuals dictionary.
+
+    # -----------------------------------
+    # Residuals based on sensor-pattern combinations
+    # -----------------------------------
     for collection_key, collection in dataset['collections'].items():
         for pattern_key, pattern in dataset['calibration_config']['calibration_patterns'].items():
             for sensor_key, sensor in dataset['sensors'].items():  # iterate all sensors
@@ -794,6 +839,76 @@ def objectiveFunction(data):
                             idxs_projected)
                 else:
                     raise ValueError("Unknown sensor msg_type or modality")
+
+    # -----------------------------------
+    # Residuals based on contacts
+    # -----------------------------------
+    if 'contacts' in dataset['calibration_config'].keys():
+
+        # This is the version with absolute xyz of touched point
+        # for collection_key, collection in dataset["collections"].items():
+        #     for contact_key, contact in dataset['calibration_config']['contacts'].items():
+
+        #         if contact['type'] == 'frame_alignment':
+
+        #             world_link = dataset['calibration_config']['world_link']
+
+        #             # touching link
+        #             touching_link = contact['touching_link']
+        #             world_to_touching_link = getTransform(
+        #                 world_link, touching_link, collection['transforms'])
+
+        #             # touched link
+        #             touched_link = contact['touched_link']
+        #             world_to_touched_link = getTransform(
+        #                 world_link, touched_link, collection['transforms'])
+
+        #             # compute the translation residual
+        #             rname = "c" + collection_key + "_ct_" + contact_key + '_translation'
+
+        #             # extract only the translation component
+        #             r[rname] = np.linalg.norm(
+        #                 world_to_touching_link[0:3, 3] - world_to_touched_link[0:3, 3])
+
+        #             # compute the rotation residual
+        #             # rname = "c" + collection_key + "_ct_" + contact_key + '_rotation'
+        #             # r[rname] = rotation_magnitude(world_to_touched_link, world_to_touching_link)
+
+        #             # print('collection_key = ' + collection_key)
+        #             # print('world_to_touching_link =\n' + str(world_to_touching_link))
+        #             # print('wold_to_touched_link =\n' + str(world_to_touched_link))
+
+        # This is the version without the absolute xyz
+        for contact_key, contact in dataset['calibration_config']['contacts'].items():
+            # TODO change contact type
+            if contact['type'] == 'frame_alignment':
+
+                world_link = dataset['calibration_config']['world_link']
+
+                for collection_a, collection_b in list(itertools.combinations(
+                        dataset['collections'].keys(), 2)):
+
+                    # print('collection_a: ' + str(collection_a) + ' collection_b: ' + str(collection_b))
+
+                    # touching link collection_a
+                    touching_link_a = contact['touching_link']
+                    world_to_touching_link_a = getTransform(
+                        world_link, touching_link_a,
+                        dataset['collections'][collection_a]['transforms'])
+
+                    # touching link collection_b
+                    touching_link_b = contact['touching_link']
+                    world_to_touching_link_b = getTransform(
+                        world_link, touching_link_b,
+                        dataset['collections'][collection_b]['transforms'])
+
+                    # compute the translation residual
+                    rname = "c" + str(collection_a) + "_c_" + str(collection_b) + \
+                        '_' + contact_key + '_translation'
+
+                    # extract only the translation component
+                    r[rname] = np.linalg.norm(
+                        world_to_touching_link_a[0:3, 3] - world_to_touching_link_b[0:3, 3])
 
     if args['verbose'] and data['status']['is_iteration']:
         errorReport(dataset=dataset, residuals=r, normalizer=normalizer, args=args)

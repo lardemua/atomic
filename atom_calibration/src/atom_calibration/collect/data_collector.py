@@ -49,8 +49,10 @@ class DataCollector:
         if os.path.exists(self.output_folder) and not args['overwrite']:
 
             time.sleep(1.5)
-            atomError('\n' + Fore.RED + 'Error: Dataset ' + self.output_folder +
-                      ' exists.\nIf you want to replace it add a "--overwrite" flag.' + Style.RESET_ALL + '\n')
+            atomError(
+                '\n' + Fore.RED + 'Error: Dataset ' + self.output_folder +
+                ' exists.\nIf you want to replace it add a "--overwrite" flag.' + Style.RESET_ALL +
+                '\n')
 
         # move existing path to a backup location
         elif os.path.exists(self.output_folder) and args['overwrite']:
@@ -60,9 +62,11 @@ class DataCollector:
             backup_folder = '/tmp/' + basename + '_' + dt_string
 
             time.sleep(0.5)
-            print('\n\nWarning: Dataset ' + Fore.YELLOW + self.output_folder + Style.RESET_ALL +
-                  ' exists.\nMoving it to temporary folder: ' + Fore.YELLOW + backup_folder +
-                  '\nThis will be deleted after a system reboot! If you want to keep it, copy the folder to some other location.' + Style.RESET_ALL + '\n\n')
+            print(
+                '\n\nWarning: Dataset ' + Fore.YELLOW + self.output_folder + Style.RESET_ALL +
+                ' exists.\nMoving it to temporary folder: ' + Fore.YELLOW + backup_folder +
+                '\nThis will be deleted after a system reboot! If you want to keep it, copy the folder to some other location.'
+                + Style.RESET_ALL + '\n\n')
             time.sleep(0.1)
 
             execute('mv ' + self.output_folder +
@@ -123,8 +127,10 @@ class DataCollector:
         execute(xacro_cmd, verbose=True)  # create tmp urdf file
 
         if not os.path.exists(urdf_file):
-            atomError('Could not parse description file ' + Fore.BLUE + description_file + Style.RESET_ALL + '\nYou must manually run command:\n' +
-                      Fore.BLUE + xacro_cmd + Style.RESET_ALL + '\nand fix the problem before configuring your calibration package.')
+            atomError(
+                'Could not parse description file ' + Fore.BLUE + description_file + Style.RESET_ALL +
+                '\nYou must manually run command:\n' + Fore.BLUE + xacro_cmd + Style.RESET_ALL +
+                '\nand fix the problem before configuring your calibration package.')
 
         self.urdf_description = URDF.from_xml_file(
             urdf_file)  # read the urdf file
@@ -172,9 +178,11 @@ class DataCollector:
 
             print('Configuring sensor ' + sensor_key)
             # Create a dictionary that describes this sensor
-            sensor_dict = {'_name': sensor_key, 'modality': value['modality'], 'parent': value['link'],
-                           'calibration_parent': value['parent_link'],
-                           'calibration_child': value['child_link']}
+            sensor_dict = {
+                '_name': sensor_key, 'modality': value['modality'],
+                'parent': value['link'],
+                'calibration_parent': value['parent_link'],
+                'calibration_child': value['child_link']}
 
             # TODO replace by utils function
             print("Waiting for message " + value['topic_name'] + ' ...')
@@ -206,8 +214,9 @@ class DataCollector:
 
             # Get the kinematic chain from world_link to this sensor's parent link
             now = rospy.Time()
-            print('Waiting for transformation from ' + Fore.BLUE +
-                  value['link'] + Style.RESET_ALL + ' to ' + Fore.BLUE + self.world_link + Style.RESET_ALL)
+            print(
+                'Waiting for transformation from ' + Fore.BLUE + value['link'] + Style.RESET_ALL +
+                ' to ' + Fore.BLUE + self.world_link + Style.RESET_ALL)
             self.listener.waitForTransform(
                 value['link'], self.world_link, now, rospy.Duration(5))
             print('... received!')
@@ -233,9 +242,12 @@ class DataCollector:
                   sensor_key + Style.RESET_ALL + ' is complete.')
 
         # Defining metadata
-        self.metadata = {"timestamp": str(time.time()), "date": time.ctime(time.time()), "user": getpass.getuser(),
-                         'version': self.dataset_version, 'robot_name': self.urdf_description.name,
-                         'dataset_name': self.dataset_name, 'package_name': self.config['package_name']}
+        self.metadata = {
+            "timestamp": str(time.time()),
+            "date": time.ctime(time.time()),
+            "user": getpass.getuser(),
+            'version': self.dataset_version, 'robot_name': self.urdf_description.name,
+            'dataset_name': self.dataset_name, 'package_name': self.config['package_name']}
 
         self.abstract_transforms = self.getAllAbstractTransforms()
         # print("abstract_transforms = " + str(self.abstract_transforms))
@@ -276,8 +288,11 @@ class DataCollector:
         # Also, create the additional_data_msgs dictionary and fill it with the first messages
         if 'additional_data' in self.config:
             for description, value in self.config['additional_data'].items():
-                data_dict = {'_name': description, 'modality': value['modality'], 'parent': value['link'],
-                             'calibration_parent': value['parent_link'], 'calibration_child': value['child_link']}
+                data_dict = {
+                    '_name': description, 'modality': value['modality'],
+                    'parent': value['link'],
+                    'calibration_parent': value['parent_link'],
+                    'calibration_child': value['child_link']}
 
                 print("Waiting for message " + value['topic_name'] + ' ...')
                 msg = rospy.wait_for_message(value['topic_name'], rospy.AnyMsg)
@@ -409,6 +424,8 @@ class DataCollector:
 
         for ab in abstract_transforms:  # Update all transformations
 
+            self.listener.waitForTransform(ab['parent'], ab['child'], time, rospy.Duration(4.0))
+
             transf = buffer.lookup_transform(ab['parent'], ab['child'], time)
             trans = [transf.transform.translation.x,
                      transf.transform.translation.y, transf.transform.translation.z]
@@ -456,8 +473,8 @@ class DataCollector:
         if max_delta is not None:
             # times are close enough?
             if max_delta.to_sec() > float(self.config['max_duration_between_msgs']):
-                rospy.logwarn('Max duration between msgs in collection is ' + str(max_delta.to_sec()) +
-                              '. Not saving collection.')
+                rospy.logwarn('Max duration between msgs in collection is ' +
+                              str(max_delta.to_sec()) + '. Not saving collection.')
                 return None
             else:  # test passed
                 rospy.loginfo(
@@ -505,8 +522,9 @@ class DataCollector:
                         break
 
                 if not found_in_urdf:
-                    atomError('Defined joint ' + Fore.BLUE + config_joint_key + Style.RESET_ALL +
-                              ' to be calibrated, but it does not exist in the urdf description. Run the calibration package configuration for more information.')
+                    atomError(
+                        'Defined joint ' + Fore.BLUE + config_joint_key + Style.RESET_ALL +
+                        ' to be calibrated, but it does not exist in the urdf description. Run the calibration package configuration for more information.')
 
                 # find joint in transforms pool
                 for transform_key, transform in transforms.items():
@@ -515,12 +533,13 @@ class DataCollector:
                         break
 
                 if config_joint_dict['transform_key'] is None:
-                    atomError('Defined joint ' + Fore.BLUE + config_joint_key + Style.RESET_ALL +
-                              ' to be calibrated, but it does not exist in the transformation pool. Run the calibration package configuration for more information.')
+                    atomError(
+                        'Defined joint ' + Fore.BLUE + config_joint_key + Style.RESET_ALL +
+                        ' to be calibrated, but it does not exist in the transformation pool. Run the calibration package configuration for more information.')
 
                 if config_joint_key not in self.joint_state_position_dict:
-                    atomError('Could not get position of joint ' + Fore.BLUE + config_joint_key + Style.RESET_ALL +
-                              ' from /joint_state messages.')
+                    atomError('Could not get position of joint ' + Fore.BLUE + config_joint_key +
+                              Style.RESET_ALL + ' from /joint_state messages.')
 
                 # Get current joint position from the joint state message
                 config_joint_dict['position'] = self.joint_state_position_dict[config_joint_key]
