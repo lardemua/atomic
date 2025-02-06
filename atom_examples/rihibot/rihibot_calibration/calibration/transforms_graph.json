@@ -402,7 +402,7 @@
       "id": "imu_link",
       "is_world": false,
       "pattern": null,
-      "sensor_data": "imu"
+      "sensor_data": "imu_hand"
     },
     {
       "id": "pattern_link",

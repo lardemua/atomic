@@ -34,13 +34,13 @@
     <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
     <!-- Evaluation -->
     <node type="rgb_to_imu_evaluation" pkg="atom_evaluation" 
-        name="rgb_hand_to_imu_pattern_1_evaluation"
-        args="-cs rgb_hand -is imu -train_json $(arg train_json) -test_json $(arg test_json) -csf '$(arg csf)' -sfr" 
+        name="rgb_hand_to_imu_hand_pattern_1_evaluation"
+        args="-cs rgb_hand -is imu_hand -train_json $(arg train_json) -test_json $(arg test_json) -csf '$(arg csf)' -sfr" 
         output="screen"/>
 
     <node type="inter_collection_rgb_to_imu_evaluation" pkg="atom_evaluation" 
-        name="inter_collection_rgb_hand_to_imu_pattern_1_evaluation"
-        args="-cs rgb_hand -is imu -wf world -train_json $(arg train_json) -test_json $(arg test_json) -csf '$(arg csf)' -sfr" 
+        name="inter_collection_rgb_hand_to_imu_hand_pattern_1_evaluation"
+        args="-cs rgb_hand -is imu_hand -wf world -train_json $(arg train_json) -test_json $(arg test_json) -csf '$(arg csf)' -sfr" 
         output="screen"/>
 
     <node type="inter_collection_rgb_to_rgb_evaluation" pkg="atom_evaluation" 
@@ -49,8 +49,8 @@
         output="screen"/>
 
     <node type="inter_collection_imu_to_imu_evaluation" pkg="atom_evaluation" 
-        name="inter_collection_imu_to_imu_pattern_1_evaluation"
-        args="-ss imu -st imu -wf world -train_json $(arg train_json) -test_json $(arg test_json) -csf '$(arg csf)' -sfr" 
+        name="inter_collection_imu_hand_to_imu_hand_pattern_1_evaluation"
+        args="-ss imu_hand -st imu_hand -wf world -train_json $(arg train_json) -test_json $(arg test_json) -csf '$(arg csf)' -sfr" 
         output="screen"/>
 
     
