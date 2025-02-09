@@ -10,32 +10,38 @@ from atom_calibration.collect import patterns
 from atom_core.dataset_io import addNoiseToInitialGuess, filterCollectionsFromDataset, loadResultsJSON
 from atom_core.utilities import atomError, createLambdaExpressionsForArgs
 
+def skew_sym_matrix(vector):
 
-def generate_skew_symmetric_4x4_matrix_from_vector(vector):
+    skew_symmetric_matrix = np.zeros((3,3))
 
-    skew_symmetric_matrix = np.zeros((4,4))
+    skew_symmetric_matrix[0,1] = -vector[2]
+    skew_symmetric_matrix[0,2] = vector[1]
+    skew_symmetric_matrix[1,0] = vector[2]
+    skew_symmetric_matrix[1,2] = -vector[0]
+    skew_symmetric_matrix[2,0] = -vector[1]
+    skew_symmetric_matrix[2,1] = vector[0]
+
+    return skew_symmetric_matrix   
+
+def omega(vector):
+
+    M = np.zeros((4,4))
+    M[1:,1:] = -skew_sym_matrix(vector)
+    M[1:, 0] = vector
+    M[0, 1:] = -vector
     
-    skew_symmetric_matrix[0,1] = -vector[0]
-    skew_symmetric_matrix[0,2] = -vector[1]
-    skew_symmetric_matrix[0,3] = -vector[2]
+    return M
 
-    skew_symmetric_matrix[1,0] = vector[0]
-    skew_symmetric_matrix[1,2] = vector[2]
-    skew_symmetric_matrix[1,3] = -vector[1]
-
-    skew_symmetric_matrix[2,0] = vector[1]
-    skew_symmetric_matrix[2,1] = -vector[2]
-    skew_symmetric_matrix[2,3] = vector[0]
+def normalize_quaternion(quaternion):
     
-    skew_symmetric_matrix[3,0] = vector[2]
-    skew_symmetric_matrix[3,1] = vector[1]
-    skew_symmetric_matrix[3,2] = -vector[0]
+    if quaternion[0] < 0:
+        quaternion = -1 * quaternion
+    
+    normalized_quaternion = quaternion/np.linalg.norm(quaternion)
 
-    return skew_symmetric_matrix
+    return normalized_quaternion
 
-
-
-def rk4_imu_integration(imu_data_0, imu_data_1, initial_orientation):
+def rk4_imu_integration(imu_data_0, imu_data_1):
     # This function receives two imu "data points" and integrates the angular velocity and linear acceleration to calculate the angular and linear displacements between these two points.
 
     # Get delta_t
@@ -43,31 +49,22 @@ def rk4_imu_integration(imu_data_0, imu_data_1, initial_orientation):
     t_1 = imu_data_1["header"]["stamp"]["secs"] + (10**(-9)) * imu_data_1["header"]["stamp"]["nsecs"]
     delta_t = t_1 - t_0
 
-    # initial_orientatio    n = np.array([*initial_orientation.values()]).T
+    initial_delta_orientation = np.array([1.0, 0.0, 0.0, 0.0])
 
     # Orientation integration
-    omega_0 = np.array([*imu_data_0["angular_velocity"].values()])
-    omega_1 = np.array([*imu_data_1["angular_velocity"].values()])
+    ang_vel_0 = np.array([*imu_data_0["angular_velocity"].values()])
+    ang_vel_1 = np.array([*imu_data_1["angular_velocity"].values()])
 
+    d_ang_vel = (ang_vel_1 - ang_vel_0)/delta_t
 
-    q1 = initial_orientation
-    omega_m_0 = generate_skew_symmetric_4x4_matrix_from_vector(omega_0) 
-    k1 = (1/2) * (omega_m_0 @ q1)
-
-    q2 = initial_orientation + delta_t*(1/2)*k1
-    omega_m_halfway = generate_skew_symmetric_4x4_matrix_from_vector((omega_0 + omega_1)/2)
-    k2 = (1/2) * (omega_m_halfway @ q2)
-
-    q3 = initial_orientation + delta_t*(1/2)*k2
-    k3 = (1/2) * (omega_m_halfway @ q3)
-
-    q4 = initial_orientation + delta_t*k3
-    omega_m_1 = generate_skew_symmetric_4x4_matrix_from_vector(omega_1)
-    k4 = (1/2) * (omega_m_1 @ q4)
-
-    final_orientation = initial_orientation + delta_t * ((k1/6) + (k2/3) + (k3/3) + (k4/6))
-
-    return final_orientation
+    k1 = delta_t * (0.5 * np.matmul(omega(ang_vel_0), initial_delta_orientation))
+    k2 = delta_t * (0.5 * np.matmul(omega(ang_vel_0 + 0.5*d_ang_vel*delta_t), normalize_quaternion(initial_delta_orientation + 0.5*k1)))
+    k3 = delta_t * (0.5 * np.matmul(omega(ang_vel_0 + 0.5*d_ang_vel*delta_t), normalize_quaternion(initial_delta_orientation + 0.5*k2)))
+    k4 = delta_t * (0.5 * np.matmul(omega(ang_vel_0 + d_ang_vel*delta_t), normalize_quaternion(initial_delta_orientation + k3)))
+    
+    delta_orientation = normalize_quaternion(initial_delta_orientation + (k1 + 2*k2 + 2*k3 + k4)/6.0)
+    
+    return delta_orientation
 
 def main():
     ########################################
@@ -109,31 +106,48 @@ def main():
     
     # For each collection, get a list of all IMU data from continuous_sensor_data from the previous collection to the next 
     for collection_key, collection in dataset["collections"].items():
-        imu_seq = collection["data"][imu_name]["header"]["seq"]
+        
+        collection_stamp = (collection["data"][imu_name]["header"]["stamp"]["secs"], collection["data"][imu_name]["header"]["stamp"]["nsecs"])
 
         tmp_checkpoint = 0 # Here to avoid iterating over the same datapoints
-        imu_data_keys = []
         for i in range(tmp_checkpoint, len(dataset["continuous_sensor_data"][imu_name])):
 
             if i == 0:
                 initial_orientation = np.array([*dataset["continuous_sensor_data"][imu_name][i]["orientation"].values()])
+                tmp_q = initial_orientation
                 continue
-            
+
             data_0 = dataset["continuous_sensor_data"][imu_name][i-1]
             data_1 = dataset["continuous_sensor_data"][imu_name][i]
 
-            final_orientation = rk4_imu_integration(
+            delta_q = rk4_imu_integration(
                 imu_data_0=data_0,
-                imu_data_1=data_1,
-                initial_orientation=initial_orientation
+                imu_data_1=data_1
             )
+            print(delta_q)
 
-            initial_orientation = final_orientation
 
-            if dataset["continuous_sensor_data"][imu_name][i]["header"]["seq"] ==  imu_seq:
+            # Get new orientation
+            tmp_q = np.array([
+            delta_q[0] * tmp_q[0] - delta_q[1] * tmp_q[1] - delta_q[2] * tmp_q[2] - delta_q[3] * tmp_q[3],  # w
+            
+            delta_q[0] * tmp_q[1] + delta_q[1] * tmp_q[0] + delta_q[2] * tmp_q[3] - delta_q[3] * tmp_q[2],  # x
+            
+            delta_q[0] * tmp_q[2] - delta_q[1] * tmp_q[3] + delta_q[2] * tmp_q[0] + delta_q[3] * tmp_q[1],  # y
+            
+            delta_q[0] * tmp_q[3] + delta_q[1] * tmp_q[2] - delta_q[2] * tmp_q[1] + delta_q[3] * tmp_q[0]   # z
+            ])
+
+            # if tmp_q[0] < 0:
+            #     tmp_q = -1 * tmp_q
+            
+            if i == 1:
+                print(f'Orientation at i == 1: {tmp_q}')
+
+            if (dataset["continuous_sensor_data"][imu_name][i]["header"]["stamp"]["secs"], dataset["continuous_sensor_data"][imu_name][i]["header"]["stamp"]["nsecs"]) ==  collection_stamp:
                 tmp_checkpoint = i
-                print(final_orientation)
-
+                final_orientation = tmp_q
+                print(f'Orientation at collection {collection_key}: {final_orientation}')
 
 
 if __name__ == "__main__":
